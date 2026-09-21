@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+projets/*
+!projets/.gitkeep
+assets/models/*
+!assets/models/.gitkeep
+tools/
+.cache/
+*.log
+.DS_Store

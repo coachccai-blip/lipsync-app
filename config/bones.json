@@ -1,0 +1,134 @@
+{
+  "_doc": "Alias de noms d os par nom canonique (résolution insensible à la casse et aux séparateurs) et liste des os du haut du corps conservés pour les clips.",
+  "aliases": {
+    "hips": [
+      "Hips",
+      "mixamorigHips",
+      "pelvis",
+      "CC_Base_Hip",
+      "J_Bip_C_Hips"
+    ],
+    "spine": [
+      "Spine",
+      "mixamorigSpine",
+      "spine_01",
+      "CC_Base_Waist",
+      "J_Bip_C_Spine"
+    ],
+    "spine1": [
+      "Spine1",
+      "mixamorigSpine1",
+      "spine_02",
+      "CC_Base_Spine01",
+      "J_Bip_C_Chest"
+    ],
+    "spine2": [
+      "Spine2",
+      "mixamorigSpine2",
+      "spine_03",
+      "CC_Base_Spine02",
+      "J_Bip_C_UpperChest"
+    ],
+    "neck": [
+      "Neck",
+      "mixamorigNeck",
+      "neck_01",
+      "CC_Base_NeckTwist01",
+      "J_Bip_C_Neck"
+    ],
+    "head": [
+      "Head",
+      "mixamorigHead",
+      "head",
+      "CC_Base_Head",
+      "J_Bip_C_Head"
+    ],
+    "leftShoulder": [
+      "LeftShoulder",
+      "mixamorigLeftShoulder",
+      "clavicle_l",
+      "CC_Base_L_Clavicle",
+      "J_Bip_L_Shoulder"
+    ],
+    "rightShoulder": [
+      "RightShoulder",
+      "mixamorigRightShoulder",
+      "clavicle_r",
+      "CC_Base_R_Clavicle",
+      "J_Bip_R_Shoulder"
+    ],
+    "leftArm": [
+      "LeftArm",
+      "mixamorigLeftArm",
+      "upperarm_l",
+      "CC_Base_L_Upperarm",
+      "J_Bip_L_UpperArm"
+    ],
+    "rightArm": [
+      "RightArm",
+      "mixamorigRightArm",
+      "upperarm_r",
+      "CC_Base_R_Upperarm",
+      "J_Bip_R_UpperArm"
+    ],
+    "leftForeArm": [
+      "LeftForeArm",
+      "mixamorigLeftForeArm",
+      "lowerarm_l",
+      "CC_Base_L_Forearm",
+      "J_Bip_L_LowerArm"
+    ],
+    "rightForeArm": [
+      "RightForeArm",
+      "mixamorigRightForeArm",
+      "lowerarm_r",
+      "CC_Base_R_Forearm",
+      "J_Bip_R_LowerArm"
+    ],
+    "leftHand": [
+      "LeftHand",
+      "mixamorigLeftHand",
+      "hand_l",
+      "CC_Base_L_Hand",
+      "J_Bip_L_Hand"
+    ],
+    "rightHand": [
+      "RightHand",
+      "mixamorigRightHand",
+      "hand_r",
+      "CC_Base_R_Hand",
+      "J_Bip_R_Hand"
+    ],
+    "leftEye": [
+      "LeftEye",
+      "mixamorigLeftEye",
+      "eye_l",
+      "CC_Base_L_Eye",
+      "J_Adj_L_FaceEye"
+    ],
+    "rightEye": [
+      "RightEye",
+      "mixamorigRightEye",
+      "eye_r",
+      "CC_Base_R_Eye",
+      "J_Adj_R_FaceEye"
+    ]
+  },
+  "upperBody": [
+    "spine",
+    "spine1",
+    "spine2",
+    "neck",
+    "head",
+    "leftShoulder",
+    "rightShoulder",
+    "leftArm",
+    "rightArm",
+    "leftForeArm",
+    "rightForeArm",
+    "leftHand",
+    "rightHand",
+    "leftEye",
+    "rightEye"
+  ]
+}

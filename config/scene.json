@@ -1,0 +1,121 @@
+{
+  "_doc": "Modèle, résolution, cadence, cadrage caméra, éclairage (positions relatives au centre du cadre), bulle, fond vert et paramètres de vie procédurale. Tout est éditable ; la prévisualisation se recharge à chaud.",
+  "model": "assets/models/personnage.glb",
+  "resolution": {
+    "width": 1080,
+    "height": 1080
+  },
+  "fps": 30,
+  "padding": {
+    "before": 0.5,
+    "after": 0.5
+  },
+  "background": {
+    "color": "#00FF00",
+    "greenWarnRatio": 0.05
+  },
+  "bubble": {
+    "diameter": "auto",
+    "margin": 40,
+    "background": "radial-gradient(circle at 50% 35%, #fff7e6 0%, #f3d9b1 60%, #e6c28f 100%)",
+    "ring": {
+      "enabled": true,
+      "width": 14,
+      "color": "#ffffff"
+    }
+  },
+  "camera": {
+    "fov": 28,
+    "autoFrame": true,
+    "bottomRatio": 0.55,
+    "marginTop": 0.12,
+    "distanceScale": 1,
+    "heightOffset": 0,
+    "position": [
+      0,
+      1.5,
+      2.2
+    ],
+    "target": [
+      0,
+      1.4,
+      0
+    ]
+  },
+  "lighting": {
+    "exposure": 1,
+    "ambient": {
+      "color": "#ffffff",
+      "intensity": 0.35
+    },
+    "key": {
+      "color": "#fff1e0",
+      "intensity": 2.4,
+      "position": [
+        1.2,
+        0.9,
+        1.6
+      ],
+      "shadows": true
+    },
+    "fill": {
+      "color": "#dbe9ff",
+      "intensity": 0.9,
+      "position": [
+        -1.8,
+        0.2,
+        1.2
+      ]
+    },
+    "rim": {
+      "color": "#ffffff",
+      "intensity": 1.4,
+      "position": [
+        -0.6,
+        0.9,
+        -1.8
+      ]
+    },
+    "eyeCatch": {
+      "color": "#ffffff",
+      "intensity": 0.6,
+      "position": [
+        0.3,
+        0.3,
+        1.4
+      ]
+    },
+    "environment": {
+      "enabled": true,
+      "intensity": 0.5
+    }
+  },
+  "life": {
+    "enabled": true,
+    "blink": {
+      "minInterval": 2,
+      "maxInterval": 6,
+      "duration": 0.16,
+      "doubleProbability": 0.15
+    },
+    "gaze": {
+      "minInterval": 0.8,
+      "maxInterval": 3.5,
+      "amplitude": 0.25,
+      "duration": 0.12
+    },
+    "breathing": {
+      "period": 4.2,
+      "amplitude": 0.8
+    },
+    "head": {
+      "amplitude": 2.2,
+      "speed": 0.18,
+      "nodOnAccent": 1.6
+    },
+    "brows": {
+      "raiseOnAccent": 0.25,
+      "duration": 0.35
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@avatar/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Commandes avatar prepare / preview / render.",
+  "bin": {
+    "avatar": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@avatar/pipeline": "0.1.0",
+    "@avatar/renderer": "0.1.0",
+    "@avatar/shared": "0.1.0",
+    "commander": "^13.0.0",
+    "dotenv": "^16.4.0"
+  }
+}

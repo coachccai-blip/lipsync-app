@@ -1,0 +1,23 @@
+{
+  "name": "@avatar/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pipeline de préparation : audio, TTS, transcription, alignement, balises, Rhubarb, énergie, annotation LLM, performance.json.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
+    "@avatar/shared": "0.1.0",
+    "zod": "^3.25.0"
+  }
+}

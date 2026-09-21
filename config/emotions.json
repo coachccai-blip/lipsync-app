@@ -1,0 +1,100 @@
+{
+  "_doc": "Poses de blendshapes de chaque émotion (vocabulaire fermé du LLM et des balises), durée de fondu, atténuation de la zone bouche pendant la parole.",
+  "fadeMs": 400,
+  "speechAttenuation": 0.4,
+  "mouthZone": [
+    "jawForward",
+    "jawLeft",
+    "jawRight",
+    "jawOpen",
+    "mouthClose",
+    "mouthFunnel",
+    "mouthPucker",
+    "mouthLeft",
+    "mouthRight",
+    "mouthSmileLeft",
+    "mouthSmileRight",
+    "mouthFrownLeft",
+    "mouthFrownRight",
+    "mouthDimpleLeft",
+    "mouthDimpleRight",
+    "mouthStretchLeft",
+    "mouthStretchRight",
+    "mouthRollLower",
+    "mouthRollUpper",
+    "mouthShrugLower",
+    "mouthShrugUpper",
+    "mouthPressLeft",
+    "mouthPressRight",
+    "mouthLowerDownLeft",
+    "mouthLowerDownRight",
+    "mouthUpperUpLeft",
+    "mouthUpperUpRight",
+    "tongueOut"
+  ],
+  "emotions": {
+    "neutre": {},
+    "enjoué": {
+      "mouthSmileLeft": 0.55,
+      "mouthSmileRight": 0.55,
+      "cheekSquintLeft": 0.3,
+      "cheekSquintRight": 0.3,
+      "browInnerUp": 0.15,
+      "eyeSquintLeft": 0.15,
+      "eyeSquintRight": 0.15
+    },
+    "sérieux": {
+      "browDownLeft": 0.35,
+      "browDownRight": 0.35,
+      "mouthPressLeft": 0.2,
+      "mouthPressRight": 0.2,
+      "eyeSquintLeft": 0.1,
+      "eyeSquintRight": 0.1
+    },
+    "surpris": {
+      "browInnerUp": 0.7,
+      "browOuterUpLeft": 0.6,
+      "browOuterUpRight": 0.6,
+      "eyeWideLeft": 0.6,
+      "eyeWideRight": 0.6,
+      "jawOpen": 0.15
+    },
+    "inquiet": {
+      "browInnerUp": 0.6,
+      "browDownLeft": 0.15,
+      "browDownRight": 0.15,
+      "mouthFrownLeft": 0.3,
+      "mouthFrownRight": 0.3,
+      "eyeWideLeft": 0.2,
+      "eyeWideRight": 0.2
+    },
+    "complice": {
+      "mouthSmileLeft": 0.5,
+      "mouthSmileRight": 0.25,
+      "eyeSquintLeft": 0.35,
+      "eyeSquintRight": 0.15,
+      "browOuterUpLeft": 0.3,
+      "cheekSquintLeft": 0.3
+    },
+    "enthousiaste": {
+      "mouthSmileLeft": 0.75,
+      "mouthSmileRight": 0.75,
+      "browInnerUp": 0.4,
+      "browOuterUpLeft": 0.4,
+      "browOuterUpRight": 0.4,
+      "eyeWideLeft": 0.3,
+      "eyeWideRight": 0.3,
+      "cheekSquintLeft": 0.35,
+      "cheekSquintRight": 0.35
+    },
+    "pensif": {
+      "browDownLeft": 0.2,
+      "browInnerUp": 0.25,
+      "eyeLookUpLeft": 0.3,
+      "eyeLookUpRight": 0.3,
+      "mouthPressLeft": 0.25,
+      "mouthPressRight": 0.25,
+      "mouthLeft": 0.2
+    }
+  }
+}

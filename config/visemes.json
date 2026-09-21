@@ -1,0 +1,46 @@
+{
+  "_doc": "Correspondance formes Rhubarb (A..H, X) -> blendshapes ARKit, transition (ms), anticipation (ms), exagération et influence de l énergie sur jawOpen.",
+  "transitionMs": 75,
+  "anticipationMs": 40,
+  "exaggeration": 1.2,
+  "energyInfluence": 0.5,
+  "shapes": {
+    "X": {},
+    "A": {
+      "mouthClose": 0.3,
+      "mouthPressLeft": 0.3,
+      "mouthPressRight": 0.3
+    },
+    "B": {
+      "jawOpen": 0.1,
+      "mouthStretchLeft": 0.3,
+      "mouthStretchRight": 0.3
+    },
+    "C": {
+      "jawOpen": 0.35,
+      "mouthSmileLeft": 0.15,
+      "mouthSmileRight": 0.15
+    },
+    "D": {
+      "jawOpen": 0.65
+    },
+    "E": {
+      "jawOpen": 0.3,
+      "mouthFunnel": 0.45
+    },
+    "F": {
+      "jawOpen": 0.15,
+      "mouthPucker": 0.8
+    },
+    "G": {
+      "jawOpen": 0.05,
+      "mouthRollLower": 0.5,
+      "mouthUpperUpLeft": 0.2,
+      "mouthUpperUpRight": 0.2
+    },
+    "H": {
+      "jawOpen": 0.3,
+      "tongueOut": 0.1
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@avatar/player",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Page Three.js : scène, bulle, couches d'animation, renderFrame(t). Partagée par la prévisualisation, le rendu et la démo GitHub Pages.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:pages": "vite build --mode pages",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@avatar/shared": "0.1.0",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "vite": "^7.0.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@avatar/renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Rendu hors ligne image par image : Puppeteer (Chrome headless) + ffmpeg.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@avatar/pipeline": "0.1.0",
+    "@avatar/shared": "0.1.0",
+    "puppeteer-core": "^24.0.0"
+  }
+}

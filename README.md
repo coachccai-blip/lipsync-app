@@ -1,1 +1,206 @@
-# lipsync-app
+# Avatar Studio
+
+Transforme un **enregistrement de voix** ou un **texte** en une vidéo d'un personnage 3D cartoon (buste dans une bulle ronde, fond vert ou transparent) qui parle en lip sync, avec expressions faciales et gestuelle. La vidéo est destinée à être incrustée au montage.
+
+```bash
+# Mode A : depuis un enregistrement de voix
+npm run avatar -- prepare --audio voix.mp3 --out projets/demo
+
+# Mode B : depuis un texte (synthèse vocale Azure, voix fr-FR-Vivienne HD)
+npm run avatar -- prepare --texte script.txt --out projets/demo
+
+# Vérifier et retoucher avant rendu (prévisualisation temps réel, rechargement à chaud)
+npm run avatar -- preview projets/demo
+
+# Rendu final (hors ligne, image par image, déterministe)
+npm run avatar -- render projets/demo --format mp4          # fond vert
+npm run avatar -- render projets/demo --format prores4444   # transparence (.mov)
+npm run avatar -- render projets/demo --format webm-alpha   # transparence (.webm)
+```
+
+`prepare` produit un dossier projet (`audio.wav`, `transcript.txt`, `performance.json` éditable à la main). `render` ne fait que lire ce dossier. Chaque étape de `prepare` est mise en cache (`cache/`) et n'est recalculée que si son entrée a changé.
+
+---
+
+## 1. Installation
+
+Prérequis : **Node.js 20+**, **ffmpeg** (avec libx264, prores_ks, libvpx-vp9), **Chrome/Chromium**, **Rhubarb Lip Sync**, **whisper.cpp** + un modèle ggml.
+
+```bash
+npm install
+npm run setup          # vérifie ffmpeg et Chrome, télécharge Rhubarb dans tools/, explique whisper.cpp
+cp .env.example .env   # puis renseigner les clés Azure et Anthropic, WHISPER_MODEL, etc.
+npm run build          # compile les packages et la page du player
+npm run avatar -- check   # bilan : outils, variables, modèle, player
+```
+
+### whisper.cpp (transcription locale, horodatage au mot)
+
+- macOS : `brew install whisper-cpp` (binaire `whisper-cli`).
+- Linux / Windows : compiler <https://github.com/ggml-org/whisper.cpp> (`cmake -B build && cmake --build build`), le binaire est `build/bin/whisper-cli`.
+- Modèle : télécharger `ggml-small.bin` (rapide) ou `ggml-medium.bin` (plus précis) depuis <https://huggingface.co/ggerganov/whisper.cpp/tree/main>.
+- Dans `.env` : `WHISPER_BIN=/chemin/whisper-cli` et `WHISPER_MODEL=/chemin/ggml-small.bin`.
+
+### Modèle 3D
+
+Déposez votre GLB (style cartoon, squelette humanoïde, 52 blendshapes ARKit) dans `assets/models/` et indiquez son nom dans `config/scene.json` → `model`. Puis :
+
+```bash
+npm run inspect-model -- assets/models/personnage.glb
+```
+
+Le script liste les os, les blendshapes (avec la correspondance ARKit tolérante à la casse et aux séparateurs) et les animations embarquées. Si des os sont signalés manquants au chargement, ajoutez leurs noms dans `config/bones.json` → `aliases`.
+
+Sans modèle, un **personnage de substitution** procédural (tête, yeux, sourcils, bouche, buste, bras) est utilisé : il permet de tester toute la chaîne.
+
+---
+
+## 2. Utilisation
+
+| Commande | Rôle |
+|---|---|
+| `avatar prepare --audio X --out DIR` | mode A : normalisation → Whisper → Rhubarb → énergie → annotation LLM → `performance.json` |
+| `avatar prepare --texte X --out DIR` | mode B : balises → Azure TTS → normalisation → Whisper → réalignement script ↔ Whisper → … |
+| `avatar prepare … --sans-llm` | pas d'appel Anthropic : expressions et gestes issus des balises et du procédural |
+| `avatar prepare … --force` | ignore le cache |
+| `avatar preview DIR [--port 4242] [--transparent]` | prévisualisation temps réel avec pistes (mots, visèmes, émotions, gestes, énergie, accents) ; `performance.json` et `config/*.json` sont rechargés à chaud |
+| `avatar render DIR --format mp4\|prores4444\|webm-alpha [--debut s] [--fin s] [--out f] [--frames dir]` | rendu déterministe avec barre de progression |
+| `avatar test-project DIR [--duree 4] [--visemes]` | projet de test : son de test (bip chaque seconde) + animation de test (rotation de tête, `jawOpen` sinusoïdal) |
+| `avatar check` | vérifie outils, variables d'environnement, modèle et player |
+| `npm run smoke` | vrai appel de bout en bout avec les clés de `.env` (TTS, Whisper, Rhubarb, LLM, rendu) |
+
+`npm run avatar -- <commande>` (ou `npx avatar <commande>` après `npm run build`).
+
+### Balises de jeu (mode B)
+
+```
+[enjoué] Bonjour à tous ! [geste:salut] Aujourd'hui, on va parler de…
+[sérieux] Attention, ce point est important. [geste:index]
+```
+
+`[émotion]` s'applique jusqu'à la prochaine balise d'émotion ; `[geste:nom]` se déclenche sur le mot qui suit. Les balises sont retirées avant l'envoi à Azure, prioritaires sur l'annotation automatique ; une balise inconnue produit un avertissement avec la liste des valeurs valides.
+
+Émotions : `neutre`, `enjoué`, `sérieux`, `surpris`, `inquiet`, `complice`, `enthousiaste`, `pensif` (clés de `config/emotions.json`).
+Gestes : `salut`, `explication`, `index`, `haussement_epaules`, `mains_ouvertes`, `acquiescement`, `negation`, `reflexion` (clés de `config/gestures.json`).
+
+### Corriger la transcription (mode A)
+
+Éditez `projets/demo/transcript.txt` puis relancez `prepare` : seuls le réalignement et l'annotation sont recalculés (Whisper et Rhubarb restent en cache).
+
+### Retoucher `performance.json`
+
+Le fichier est validé au chargement avec des messages lisibles (chemin + valeur fautive). Format :
+
+```json
+{
+  "version": 1, "fps": 30, "duration": 42.18, "audio": "audio.wav", "text": "…",
+  "words":       [{ "w": "Bonjour", "start": 0.71, "end": 1.13 }],
+  "visemes":     [{ "start": 0.0, "end": 0.71, "shape": "X" }],
+  "energy":      { "rate": 30, "values": [0.02, 0.11] },
+  "accents":     [0.84, 2.60],
+  "expressions": [{ "start": 0.5, "end": 3.9, "emotion": "enjoué", "intensity": 0.8, "source": "llm" }],
+  "gestures":    [{ "at": 1.4, "clip": "salut", "source": "balise" }],
+  "seed": 12345,
+  "padding": { "before": 0.5, "after": 0.5 }
+}
+```
+
+Le schéma JSON est exporté par `PERFORMANCE_JSON_SCHEMA` (`packages/shared/src/performance.ts`). Les temps incluent le silence de repos ajouté avant la parole (`padding.before`).
+
+---
+
+## 3. Réglages visuels (`config/`)
+
+Tout ce qui est esthétique est dans `config/` ; la prévisualisation se recharge à chaque sauvegarde.
+
+| Fichier | À regarder / régler |
+|---|---|
+| `scene.json` | `model`, `resolution`, `fps`, `padding` ; **cadrage** (`camera.bottomRatio` = fraction de la hauteur du modèle où commence le cadre, `marginTop`, `distanceScale`, `heightOffset`, `fov`) ; **éclairage** trois points + `eyeCatch` (positions relatives au centre du cadre), `exposure`, `environment` ; **bulle** (`diameter`, `margin`, `background` CSS, `ring`) ; fond vert (`background.color`) ; **vie procédurale** (`life.blink`, `gaze`, `breathing`, `head`, `brows`) |
+| `visemes.json` | poids de blendshapes par forme Rhubarb (A…H, X), `transitionMs` (60–90), `anticipationMs` (30–50), `exaggeration` (1.2), `energyInfluence` |
+| `emotions.json` | pose de chaque émotion, `fadeMs` (400), `speechAttenuation` (atténuation de la zone bouche pendant la parole) |
+| `gestures.json` | `source` (`auto` / `clips` / `procedural`), `fadeMs`, `intensity`, `idle` (balancement ou clip de repos), correspondance nom → clip, gestes procéduraux par images clés (rotations d'os en degrés) |
+| `bones.json` | alias de noms d'os, liste des os du haut du corps conservés pour les clips |
+
+Points à vérifier à l'œil : cadrage (marge au-dessus de la tête, place pour les bras), amplitude de la bouche (`exaggeration`, `jawOpen` de la forme D), sobriété de la vie procédurale (`life.head.amplitude`), naturel des gestes (amplitudes dans `gestures.procedural`).
+
+---
+
+## 4. Structure du dépôt
+
+```
+packages/
+  shared/     types, validation de performance.json, PRNG, les 4 couches d'animation (fonctions pures de t)
+  pipeline/   audio, tts (Azure), transcribe (whisper.cpp), align, tags, rhubarb, energy, annotate (Anthropic), cache, prepare
+  player/     page Three.js : scène, bulle, modèle, clips, prévisualisation, window.loadProject / renderFrame(t) / getDuration
+  renderer/   serveur local, Chrome headless (Puppeteer), capture PNG → ffmpeg
+  cli/        commandes prepare, preview, render, test-project, check
+config/       scene.json, visemes.json, emotions.json, gestures.json, bones.json
+assets/       models/ (GLB, non versionné), clips/ (animations externes)
+scripts/      setup, inspect-model, smoke
+tests/        WAV de référence versionné, test de déterminisme du rendu, test du script d'inspection
+projets/      dossiers de travail (non versionnés)
+```
+
+Interfaces à un seul fichier pour changer de fournisseur : `TtsProvider` (`pipeline/src/tts/`), `Transcriber` (`pipeline/src/transcribe/`), `Annotator` (`pipeline/src/annotate.ts`), `GestureSource` (`shared/src/anim/gestures.ts`, implémentations procédurale et par clips).
+
+Variables d'environnement : `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `AZURE_TTS_VOICE`, `AZURE_TTS_TEMPERATURE`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `WHISPER_BIN`, `WHISPER_MODEL`, `RHUBARB_PATH`, `FFMPEG_PATH`, `CHROME_PATH`. Aucune clé n'est écrite dans le code, les journaux ou `performance.json`.
+
+---
+
+## 5. Comment ça marche
+
+1. **Normalisation** : WAV mono 48 kHz 16 bits, `loudnorm`, silence de repos avant et après (`scene.padding`). Ce WAV est la référence unique pour Rhubarb, Whisper, l'énergie et le mixage.
+2. **Transcription** : whisper.cpp, langue `fr`, un mot par segment. Mode B : alignement de séquences (LCS tolérant) entre les mots du script et ceux de Whisper, interpolation des mots sans correspondance.
+3. **Lip sync** : `rhubarb -f json --recognizer phonetic --extendedShapes GHX`.
+4. **Énergie** : enveloppe RMS (fenêtres de 20 ms), normalisée, rééchantillonnée à la cadence vidéo ; pics d'accent.
+5. **Annotation** : API Anthropic, sortie JSON structurée validée par schéma, vocabulaire fermé, une nouvelle tentative puis repli sur `neutre`.
+6. **Animation** (identique en prévisualisation et en rendu) : bouche (transitions adoucies, anticipation, énergie, exagération, priorité sur les expressions) + expressions (fondu 400 ms, atténuation zone bouche) + vie procédurale (clignements, saccades, respiration, micro-mouvements, sourcils sur accents, tout aléatoire issu de `seed`) + gestes (clips mélangés via `AnimationMixer` piloté par `t`, ou repli procédural).
+7. **Rendu** : Chrome headless (ANGLE ; SwiftShader en repli avec avertissement), `renderFrame(t)` pour `t = n / fps`, capture PNG → ffmpeg sur stdin. Aucun `requestAnimationFrame`, `Date.now` ou `performance.now` dans le chemin de rendu.
+
+---
+
+## 6. Tests
+
+```bash
+npm test          # vitest : logique pure, intégration (ffmpeg), déterminisme du rendu (Chrome + player construit)
+npm run typecheck
+```
+
+Les appels Azure, Whisper et LLM sont simulés dans les tests ; `npm run smoke` fait un vrai appel de bout en bout. Le test de déterminisme rend deux fois le même extrait et compare les hash SHA-256 des images.
+
+---
+
+## 7. GitHub Pages
+
+GitHub Pages n'héberge que des fichiers statiques : **la chaîne complète (`prepare`, `render`, Rhubarb, Whisper, Azure, Anthropic, ffmpeg, Chrome) tourne sur votre machine, pas sur Pages.** Ce qui se publie sur Pages est la **page du player en mode démo** : le personnage dans sa bulle sur fond vert, animé par une performance de test, avec les pistes et le rapport de chargement. On peut y déposer (glisser-déposer) son `.glb`, un `performance.json` et l'audio produits par la CLI pour les visualiser dans le navigateur.
+
+Le workflow `.github/workflows/pages.yml` construit et déploie le player à chaque push sur `main`. Pour publier :
+
+1. Fusionner cette branche dans `main` (ou pousser sur `main`).
+2. Sur GitHub : **Settings → Pages → Build and deployment → Source : GitHub Actions**.
+3. Attendre le workflow « GitHub Pages (démo du player) » ; l'URL est `https://<utilisateur>.github.io/lipsync-app/`.
+
+Pour que la page affiche votre modèle sans dépôt manuel, retirez `assets/models/*` du `.gitignore` et commitez le GLB (les fichiers de `assets/models/` et `config/` sont copiés dans le site). Un modèle acheté a souvent une licence qui interdit la publication : dans le doute, gardez-le hors du dépôt et utilisez le glisser-déposer.
+
+---
+
+## 8. État des jalons et limites connues
+
+| Jalon | État |
+|---|---|
+| 1 Squelette, `setup`, `inspect-model`, GLB en buste dans la bulle | fait ; à valider visuellement avec votre GLB |
+| 2 Rendu déterministe (test : rotation de tête + `jawOpen` sinusoïdal) | fait et testé : images identiques octet pour octet, durée vidéo = durée audio |
+| 3 Mode A bouche seule (normalisation, Rhubarb, visèmes, rendu) | codé ; à valider à l'œil sur un mp3 français (Rhubarb à installer via `npm run setup`) |
+| 4 Whisper, `transcript.txt`, énergie, vie procédurale | codé (whisper.cpp) ; à valider |
+| 5 Mode B : balises, Azure TTS Vivienne HD, réalignement | codé ; l'existence de la voix dans la région est vérifiée au premier appel |
+| 6 Expressions, annotation LLM, priorité des balises, fondus | codé ; à valider |
+| 7 Gestuelle : clips (retargeting par noms d'os) ou repli procédural | codé ; le retargeting suppose des poses de repos compatibles (voir ci-dessous) |
+| 8 Prévisualisation avec pistes et rechargement à chaud, sorties transparentes, cache, README | fait |
+
+Limites et points de vigilance :
+
+- **Retargeting** : les clips (GLB embarqué ou `assets/clips/*.glb`) sont retargetés par table de noms d'os, sans correction de pose de repos. Si les squelettes diffèrent (Mixamo vs modèle acheté), le résultat peut être déformé : passez `gestures.source` à `procedural`, ou préparez les clips dans Blender sur le squelette du modèle.
+- **Voix DragonHD** : la température est passée en SSML par l'attribut `parameters="temperature=…"` de `<voice>`, conformément à la documentation Microsoft des voix HD ; le SSML reste minimal (`<speak>`, `<voice>`). Si Azure renvoie une erreur 400, vérifiez la documentation en vigueur.
+- **Rendu logiciel** : sans GPU, Chrome utilise SwiftShader (environ 2 à 3 images/s en 1080 × 1080). Le résultat est identique, seulement plus lent.
+- **Formats GLB** : Meshopt est pris en charge ; Draco et KTX2 ne le sont pas (ré-exportez sans compression).
+- **Vérification audio/vidéo** sur une vidéo longue : rendez `avatar test-project projets/long --duree 180` puis `render` et contrôlez le bip de chaque seconde en fin de fichier.

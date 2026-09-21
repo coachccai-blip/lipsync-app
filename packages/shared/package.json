@@ -1,0 +1,18 @@
+{
+  "name": "@avatar/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Types, validation de performance.json, PRNG et couches d'animation (fonctions pures du temps) partagés entre le pipeline, le player et le renderer.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  }
+}
