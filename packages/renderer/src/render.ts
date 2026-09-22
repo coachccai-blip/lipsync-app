@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Browser, Page } from "puppeteer-core";
 import { log, repoRoot, wordsToSrt } from "@avatar/pipeline";
@@ -60,7 +60,8 @@ export async function openProject(o: { projectDir: string; root?: string; chrome
   if (o.scale && o.scale !== 1) {
     const k = 1 / o.scale;
     const b = payload.config.scene.bubble;
-    payload.config.scene.resolution = { width: Math.round(payload.config.scene.resolution.width * k), height: Math.round(payload.config.scene.resolution.height * k) };
+    const even = (v: number) => Math.max(2, Math.round((v * k) / 2) * 2);
+    payload.config.scene.resolution = { width: even(payload.config.scene.resolution.width), height: even(payload.config.scene.resolution.height) };
     b.margin = Math.round(b.margin * k);
     if (b.diameter !== "auto") b.diameter = Math.round(b.diameter * k);
     b.ring.width = Math.max(1, Math.round(b.ring.width * k));
@@ -117,14 +118,15 @@ export async function renderProject(o: RenderOptions): Promise<RenderResult> {
     if (!existsSync(audio)) throw new Error(`Audio introuvable : ${audio}`);
     if (o.framesDir) mkdirSync(o.framesDir, { recursive: true });
 
-    const encoder = o.skipEncode ? undefined : startEncoder({ format: o.format, fps, audio, output, start: firstFrame / fps, end: lastFrame / fps });
+    // encodage vers un fichier temporaire : la sortie précédente n'est remplacée qu'en cas de succès
+    const tmpOutput = output.replace(/(\.[^.]+)$/, ".partiel$1");
+    const encoder = o.skipEncode ? undefined : startEncoder({ format: o.format, fps, audio, output: tmpOutput, start: firstFrame / fps, end: lastFrame / fps });
+    let finished = false;
     const hashes: string[] = [];
     const t0 = Date.now();
+    try {
     for (let n = firstFrame; n < lastFrame; n++) {
-      if (o.signal?.aborted) {
-        encoder?.process.kill("SIGKILL");
-        throw new Error("Rendu annulé");
-      }
+      if (o.signal?.aborted) throw new Error("Rendu annulé");
       const t = n / fps;
       await opened.page.evaluate((tt) => window.renderFrame(tt), t);
       const png = Buffer.from(await opened.page.screenshot({ type: "png", omitBackground: transparent, clip: { x: 0, y: 0, width, height }, captureBeyondViewport: false, optimizeForSpeed: true }));
@@ -144,7 +146,12 @@ export async function renderProject(o: RenderOptions): Promise<RenderResult> {
     if (encoder) {
       log.info("Encodage final…");
       await encoder.finish();
+      renameSync(tmpOutput, output);
       log.done(`Vidéo écrite : ${output} (${total} images, ${(total / fps).toFixed(2)} s)`);
+    }
+    finished = true;
+    } finally {
+      if (!finished) cleanupEncoder(encoder, tmpOutput);
     }
     if (o.srt) {
       const srtFile = output.replace(/\.[^.]+$/, "") + ".srt";
@@ -156,5 +163,15 @@ export async function renderProject(o: RenderOptions): Promise<RenderResult> {
     return { output: encoder ? output : undefined, frames: total, duration: total / fps, hashes, report: opened.report };
   } finally {
     await opened.close();
+  }
+}
+
+/** Nettoie l'encodeur et le fichier temporaire d'un rendu interrompu. */
+function cleanupEncoder(encoder: { process: { kill(signal?: NodeJS.Signals): boolean; exitCode: number | null } } | undefined, tmpOutput: string): void {
+  if (encoder && encoder.process.exitCode === null) encoder.process.kill("SIGKILL");
+  try {
+    if (existsSync(tmpOutput)) unlinkSync(tmpOutput);
+  } catch {
+    /* ignorer */
   }
 }

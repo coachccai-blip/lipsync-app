@@ -18,6 +18,7 @@ export interface SheetOptions {
   chromePath?: string;
   /** Taille d'une vignette en pixels. */
   tile?: number;
+  signal?: AbortSignal;
 }
 
 interface Payload {
@@ -59,6 +60,7 @@ export async function renderPoseSheet(o: SheetOptions): Promise<string> {
 
     const files: string[] = [];
     for (const v of variants) {
+      if (o.signal?.aborted) throw new Error("Planche annulée");
       const payload: Payload = JSON.parse(JSON.stringify({ performance: base.performance, config: base.config }));
       const p = payload.performance;
       p.visemes = [];
@@ -85,30 +87,30 @@ export async function renderPoseSheet(o: SheetOptions): Promise<string> {
 
     const cols = Math.min(4, Math.ceil(Math.sqrt(variants.length)));
     const rows = Math.ceil(variants.length / cols);
-    const label = (s: string) => s.replace(/[\\':;,\[\]]/g, " ");
+    const label = (str: string) => str.replace(/[\\':;,\[\]]/g, " ");
     const filters: string[] = [];
     variants.forEach((v, i) => {
       filters.push(`[${i}]scale=${tile}:${tile},drawbox=x=0:y=0:w=${tile}:h=40:color=black@0.55:t=fill,drawtext=text='${label(v.name)}':x=8:y=8:fontsize=${Math.round(tile / 14)}:fontcolor=white[v${i}]`);
     });
     const rowLabels: string[] = [];
     for (let r = 0; r < rows; r++) {
-      const ids = [];
-      for (let ccol = 0; ccol < cols; ccol++) {
-        const i = r * cols + ccol;
+      const ids: string[] = [];
+      for (let col = 0; col < cols; col++) {
+        const i = r * cols + col;
         if (i < variants.length) ids.push(`[v${i}]`);
         else {
           filters.push(`color=c=black:s=${tile}x${tile}[pad${i}]`);
           ids.push(`[pad${i}]`);
         }
       }
-      filters.push(`${ids.join("")}hstack=${cols}[r${r}]`);
+      const out = rows > 1 ? `[r${r}]` : "";
+      if (cols > 1) filters.push(`${ids.join("")}hstack=${cols}${out}`);
+      else if (rows > 1) filters.push(`${ids[0]}copy${out}`);
       rowLabels.push(`[r${r}]`);
     }
-    const graph = filters.join(";") + (rows > 1 ? `;${rowLabels.join("")}vstack=${rows}` : "");
+    if (rows > 1) filters.push(`${rowLabels.join("")}vstack=${rows}`);
     const inputs = files.flatMap((f) => ["-i", f]);
-    const args = ["-y", "-hide_banner", "-loglevel", "error", ...inputs, "-filter_complex", rows > 1 ? graph : graph.replace(/\[r0\]$/, ""), "-frames:v", "1", o.out];
-    if (rows === 1) args[args.indexOf("-filter_complex") + 1] = filters.join(";");
-    await run(resolveTool("ffmpeg"), args);
+    await run(resolveTool("ffmpeg"), ["-y", "-hide_banner", "-loglevel", "error", ...inputs, "-filter_complex", filters.join(";"), "-frames:v", "1", o.out]);
     log.done(`Planche écrite : ${o.out} (${variants.length} vignettes)`);
     return o.out;
   } finally {

@@ -213,19 +213,19 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   };
 
   const runJob = async (job: Job): Promise<void> => {
-    const dir = projectDir(job.project);
     const controller = new AbortController();
     abortControllers.set(job.id, controller);
     const unlisten = log.listen((level, message) => pushJobEvent(job, { type: "log", level, message }));
     setStatus(job, "en_cours");
     try {
       if (controller.signal.aborted) throw new Error("annulé");
+      const dir = projectDir(job.project);
       const o = job.options;
       if (job.type === "prepare") {
         const kind = String(o.kind ?? "audio");
         const source = path.join(dir, "source", path.basename(String(o.file ?? "")));
         if (!existsSync(source)) throw new Error(`fichier source introuvable : ${source}`);
-        const r = await prepare({ [kind === "texte" ? "texte" : "audio"]: source, out: dir, sansLlm: Boolean(o.sansLlm), force: Boolean(o.force), seed: typeof o.seed === "number" ? o.seed : undefined, root });
+        const r = await prepare({ [kind === "texte" ? "texte" : "audio"]: source, out: dir, sansLlm: Boolean(o.sansLlm), force: Boolean(o.force), seed: typeof o.seed === "number" ? o.seed : undefined, root, signal: controller.signal });
         setStatus(job, "termine", { result: { warnings: r.warnings, duration: r.performance.duration } });
         notify("performance.json", job.project);
       } else if (job.type === "render") {
@@ -253,21 +253,24 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         setStatus(job, "termine", { result: { output: outName, url: `/files/${encodeURIComponent(job.project)}/${outName}`, frames: r.frames, duration: r.duration, srt: o.srt ? outName.replace(/\.[^.]+$/, ".srt") : undefined } });
       } else if (job.type === "image") {
         const { renderProject } = await import("./render.js");
-        const t = typeof o.t === "number" ? o.t : 0;
-        const fps = loadPerformance(dir).fps;
+        const perf = loadPerformance(dir);
+        const fps = perf.fps;
+        const lastIndex = Math.max(0, Math.ceil(perf.duration * fps) - 1);
+        const frame = Math.min(lastIndex, Math.max(0, Math.round((typeof o.t === "number" ? o.t : 0) * fps)));
         const framesDir = path.join(dir, "cache", "image");
         rmSync(framesDir, { recursive: true, force: true });
-        const frame = Math.round(t * fps);
-        await renderProject({ projectDir: dir, format: Boolean(o.transparent) ? "webm-alpha" : "mp4", debut: frame / fps, fin: (frame + 1) / fps, skipEncode: true, framesDir, root, quiet: true, signal: controller.signal });
-        const produced = readdirSync(framesDir).find((f) => f.endsWith(".png"));
+        // fin = (frame + 0,5) / fps : la boucle de rendu (ceil) s'arrête exactement après cette image
+        await renderProject({ projectDir: dir, format: Boolean(o.transparent) ? "webm-alpha" : "mp4", debut: frame / fps, fin: (frame + 0.5) / fps, skipEncode: true, framesDir, root, quiet: true, signal: controller.signal });
+        const produced = readdirSync(framesDir).filter((f) => f.endsWith(".png")).sort()[0];
         if (!produced) throw new Error("aucune image produite");
+        const t = frame / fps;
         const name = `image-${t.toFixed(2).replace(".", "_")}s.png`;
         writeFileSync(path.join(dir, name), readFileSync(path.join(framesDir, produced)));
         setStatus(job, "termine", { result: { output: name, url: `/files/${encodeURIComponent(job.project)}/${name}?ts=${Date.now()}` } });
       } else if (job.type === "planche") {
         const { renderPoseSheet } = await import("./sheet.js");
         const out = path.join(dir, "planche.png");
-        await renderPoseSheet({ projectDir: dir, out, emotions: Boolean(o.emotions), root, bones: o.bones as never });
+        await renderPoseSheet({ projectDir: dir, out, emotions: Boolean(o.emotions), root, bones: o.bones as never, signal: controller.signal });
         setStatus(job, "termine", { result: { output: "planche.png", url: `/files/${encodeURIComponent(job.project)}/planche.png?ts=${Date.now()}` } });
       }
     } catch (e) {

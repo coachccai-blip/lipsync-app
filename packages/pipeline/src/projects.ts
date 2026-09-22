@@ -52,7 +52,7 @@ export function summarizeProject(dir: string): ProjectSummary {
     }
   }
   for (const f of readdirSync(dir)) {
-    if (/^(sortie.*\.(mp4|mov|webm)|planche.*\.png|.*\.srt)$/i.test(f)) {
+    if (/^(sortie.*\.(mp4|mov|webm)|planche.*\.png|image-.*\.png|.*\.srt)$/i.test(f)) {
       const st = statSync(path.join(dir, f));
       summary.outputs.push({ name: f, size: st.size, mtime: st.mtime.toISOString() });
     }

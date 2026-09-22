@@ -34,6 +34,7 @@ export class Stage {
   private keyLight!: THREE.DirectionalLight;
   private lights: THREE.Object3D[] = [];
   private pmrem?: THREE.PMREMGenerator;
+  private envTexture?: THREE.Texture;
 
   cfg: SceneConfig;
   diameter = 0;
@@ -122,8 +123,12 @@ export class Stage {
     add(eye);
 
     if (L.environment.enabled) {
-      this.pmrem ??= new THREE.PMREMGenerator(this.renderer);
-      this.scene.environment = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      if (!this.envTexture) {
+        this.pmrem ??= new THREE.PMREMGenerator(this.renderer);
+        const room = new RoomEnvironment();
+        this.envTexture = this.pmrem.fromScene(room, 0.04).texture;
+      }
+      this.scene.environment = this.envTexture;
       this.scene.environmentIntensity = L.environment.intensity;
     } else {
       this.scene.environment = null;
@@ -188,7 +193,8 @@ export class Stage {
   }
 
   dispose(): void {
-    this.renderer.dispose();
+    this.envTexture?.dispose();
     this.pmrem?.dispose();
+    this.renderer.dispose();
   }
 }

@@ -10,7 +10,7 @@ import { PROJECT_FILES, ensureProjectDir, loadPerformance, readMeta, writeMeta, 
 import { runRhubarb } from "./rhubarb.js";
 import { alignScriptToAsr, splitSentences } from "./align.js";
 import { parseScript, tagsToTracks, type ScriptTag } from "./tags.js";
-import { AnthropicAnnotator, NoopAnnotator, annotationToTracks, type Annotator } from "./annotate.js";
+import { AnthropicAnnotator, annotationToTracks, type Annotator } from "./annotate.js";
 import { WhisperCppTranscriber } from "./transcribe/whisper-cpp.js";
 import type { Transcriber, Transcription } from "./transcribe/transcriber.js";
 import { AzureTtsProvider } from "./tts/azure.js";
@@ -33,6 +33,8 @@ export interface PrepareOptions {
   lipsync?: (wav: string, outputJson: string) => Promise<VisemeCue[]>;
   config?: AllConfig;
   root?: string;
+  /** Annulation (vérifiée entre les étapes ; l'étape en cours va à son terme). */
+  signal?: AbortSignal;
 }
 
 export interface PrepareResult {
@@ -87,6 +89,9 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
     log.warn(m);
   };
   const force = options.force ?? false;
+  const checkAbort = () => {
+    if (options.signal?.aborted) throw new Error("Préparation annulée");
+  };
   const mode: "audio" | "texte" = options.audio ? "audio" : "texte";
   const inputFile = path.resolve((options.audio ?? options.texte)!);
   if (!existsSync(inputFile)) throw new Error(`Fichier d'entrée introuvable : ${inputFile}`);
@@ -126,6 +131,7 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
     rawAudio = sourceCopy;
   }
 
+  checkAbort();
   // ---- 2. Normalisation ----
   const audioWav = path.join(projectDir, PROJECT_FILES.audio);
   const padding = cfg.scene.padding;
@@ -137,6 +143,7 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
   const duration = round3(await audioDuration(audioWav));
   log.info(`durée : ${duration.toFixed(2)} s`);
 
+  checkAbort();
   // ---- 3. Transcription (Whisper) ----
   const transcriber = options.transcriber ?? new WhisperCppTranscriber();
   log.step(`Transcription et horodatage des mots (${transcriber.name})`);
@@ -150,6 +157,7 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
   );
   log.info(`${asr.words.length} mots reconnus`);
 
+  checkAbort();
   // ---- 4. Texte de référence et alignement ----
   let words: Word[];
   let text: string;
@@ -185,6 +193,7 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
   }
   writeFileSync(path.join(projectDir, PROJECT_FILES.words), JSON.stringify(words, null, 1));
 
+  checkAbort();
   // ---- 5. Lip sync (Rhubarb) ----
   const visemesFile = path.join(projectDir, PROJECT_FILES.visemes);
   log.step("Lip sync (Rhubarb, reconnaisseur phonétique)");
@@ -194,12 +203,14 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
   }, { force });
   log.info(`${visemes.length} visèmes`);
 
+  checkAbort();
   // ---- 6. Énergie ----
   log.step("Analyse d'énergie");
   const wav = readWav(audioWav);
   const energy = analyzeEnergy(wav.samples, wav.sampleRate, { rate: fps });
   log.info(`${energy.accents.length} accents détectés`);
 
+  checkAbort();
   // ---- 7. Expressions et gestes ----
   const sentences = splitSentences(words);
   const tagTracks = tagsToTracks(tags, words, duration);
@@ -222,12 +233,11 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
       llmTracks = annotationToTracks(annotation, sentences, vocab, { warn });
       log.info(`${llmTracks.expressions.length} segment(s) d'émotion, ${llmTracks.gestures.length} geste(s)`);
     }
-  } else {
-    new NoopAnnotator();
   }
   const expressions = overrideSegments(llmTracks.expressions, tagTracks.expressions);
   const gestures = mergeGestures(llmTracks.gestures, tagTracks.gestures);
 
+  checkAbort();
   // ---- 8. performance.json ----
   const performance: Performance = {
     version: 1,

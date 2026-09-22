@@ -222,13 +222,20 @@ export const DEFAULT_CONFIG: AllConfig = {
   bones: DEFAULT_BONES,
 };
 
-/** Fusion profonde (les objets sont fusionnés, les tableaux et scalaires remplacés). */
+function clone<T>(v: T): T {
+  return v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T);
+}
+
+/**
+ * Fusion profonde (les objets sont fusionnés, les tableaux et scalaires remplacés).
+ * Le résultat est toujours une copie : les valeurs par défaut ne sont jamais partagées ni mutées.
+ */
 export function deepMerge<T>(base: T, override: unknown): T {
-  if (override === undefined || override === null) return base;
+  if (override === undefined || override === null) return clone(base);
   if (Array.isArray(base) || Array.isArray(override) || typeof base !== "object" || typeof override !== "object" || base === null) {
-    return override as T;
+    return clone(override) as T;
   }
-  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  const out: Record<string, unknown> = { ...clone(base as Record<string, unknown>) };
   for (const [k, v] of Object.entries(override as Record<string, unknown>)) {
     out[k] = deepMerge((base as Record<string, unknown>)[k], v);
   }
