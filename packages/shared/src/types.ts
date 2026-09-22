@@ -138,6 +138,11 @@ export interface GestureConfig {
   fadeMs: number;
   /** Amplitude globale des gestes procéduraux (1 = tel que défini). */
   intensity: number;
+  /**
+   * Pose de repos additive (degrés) appliquée en permanence : sert à ramener les bras le long
+   * du corps quand le modèle est livré en A-pose ou T-pose. Mettre {} si les clips gèrent la pose.
+   */
+  restPose: BoneRotations;
   idle: {
     /** Balancement du buste en degrés. */
     swayAmplitude: number;

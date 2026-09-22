@@ -6,6 +6,8 @@ projets/*
 !projets/.gitkeep
 assets/models/*
 !assets/models/.gitkeep
+!assets/models/mpfb-cc0.glb
+!assets/models/LICENCE-mpfb.md
 tools/
 .cache/
 *.log

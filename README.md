@@ -43,7 +43,9 @@ npm run avatar -- check   # bilan : outils, variables, modèle, player
 
 ### Modèle 3D
 
-Déposez votre GLB (style cartoon, squelette humanoïde, 52 blendshapes ARKit) dans `assets/models/` et indiquez son nom dans `config/scene.json` → `model`. Puis :
+Un avatar de démonstration **CC0** est fourni : `assets/models/mpfb-cc0.glb` (créé avec MakeHuman/MPFB, squelette Mixamo, 52 blendshapes ARKit, style réaliste ; voir `assets/models/LICENCE-mpfb.md`). Il sert à valider toute la chaîne et s'affiche sur la page GitHub Pages.
+
+Pour utiliser le vôtre, déposez votre GLB (style cartoon, squelette humanoïde, 52 blendshapes ARKit) dans `assets/models/` et indiquez son nom dans `config/scene.json` → `model`. Puis :
 
 ```bash
 npm run inspect-model -- assets/models/personnage.glb
@@ -65,6 +67,7 @@ Sans modèle, un **personnage de substitution** procédural (tête, yeux, sourci
 | `avatar prepare … --force` | ignore le cache |
 | `avatar preview DIR [--port 4242] [--transparent]` | prévisualisation temps réel avec pistes (mots, visèmes, émotions, gestes, énergie, accents) ; `performance.json` et `config/*.json` sont rechargés à chaud |
 | `avatar render DIR --format mp4\|prores4444\|webm-alpha [--debut s] [--fin s] [--out f] [--frames dir]` | rendu déterministe avec barre de progression |
+| `avatar planche DIR [--emotions] [--os "rightArm=0,0,-100;rightForeArm=-90,0,0\|head=0,30,0"]` | planche de contrôle PNG : pose de repos, chaque geste procédural à mi-parcours, chaque émotion, ou des rotations d'os à tester ; sert à régler `config/gestures.json` à l'œil |
 | `avatar test-project DIR [--duree 4] [--visemes]` | projet de test : son de test (bip chaque seconde) + animation de test (rotation de tête, `jawOpen` sinusoïdal) |
 | `avatar check` | vérifie outils, variables d'environnement, modèle et player |
 | `npm run smoke` | vrai appel de bout en bout avec les clés de `.env` (TTS, Whisper, Rhubarb, LLM, rendu) |
@@ -120,6 +123,10 @@ Tout ce qui est esthétique est dans `config/` ; la prévisualisation se recharg
 | `emotions.json` | pose de chaque émotion, `fadeMs` (400), `speechAttenuation` (atténuation de la zone bouche pendant la parole) |
 | `gestures.json` | `source` (`auto` / `clips` / `procedural`), `fadeMs`, `intensity`, `idle` (balancement ou clip de repos), correspondance nom → clip, gestes procéduraux par images clés (rotations d'os en degrés) |
 | `bones.json` | alias de noms d'os, liste des os du haut du corps conservés pour les clips |
+
+### Pose de repos et gestes procéduraux
+
+Les modèles sont souvent livrés en A-pose ou T-pose : `gestures.restPose` (degrés par os) ramène les bras le long du corps, et les gestes procéduraux s'ajoutent par-dessus (rotations composées, pas additionnées). **Le sens des axes dépend du squelette.** Sur l'avatar de démonstration (squelette MPFB/Mixamo), depuis la pose de repos : bras `Z < 0` = lever sur le côté, bras `Y > 0` (droite) / `Y < 0` (gauche) = avancer, bras `X < 0` = écarter ; avant-bras `Z < 0` = plier vers l'avant, `X < 0` = plier vers le haut quand le bras est levé. Pour un autre modèle, lancez `avatar planche projets/test --os "rightArm=45,0,0|rightArm=0,45,0|rightArm=0,0,45|rightForeArm=45,0,0|rightForeArm=0,45,0|rightForeArm=0,0,45"` et lisez la planche pour retrouver le sens de chaque axe, puis ajustez `restPose` et les images clés.
 
 Points à vérifier à l'œil : cadrage (marge au-dessus de la tête, place pour les bras), amplitude de la bouche (`exaggeration`, `jawOpen` de la forme D), sobriété de la vie procédurale (`life.head.amplitude`), naturel des gestes (amplitudes dans `gestures.procedural`).
 
@@ -180,7 +187,7 @@ Le workflow `.github/workflows/pages.yml` construit et déploie le player à cha
 2. Sur GitHub : **Settings → Pages → Build and deployment → Source : GitHub Actions**.
 3. Attendre le workflow « GitHub Pages (démo du player) » ; l'URL est `https://<utilisateur>.github.io/lipsync-app/`.
 
-Pour que la page affiche votre modèle sans dépôt manuel, retirez `assets/models/*` du `.gitignore` et commitez le GLB (les fichiers de `assets/models/` et `config/` sont copiés dans le site). Un modèle acheté a souvent une licence qui interdit la publication : dans le doute, gardez-le hors du dépôt et utilisez le glisser-déposer.
+La page affiche le modèle indiqué dans `config/scene.json` s'il est présent dans le dépôt (l'avatar CC0 fourni l'est ; les fichiers de `assets/models/` et `config/` sont copiés dans le site). Pour publier votre propre modèle, ajoutez une exception dans `.gitignore` comme pour `mpfb-cc0.glb`. Un modèle acheté a souvent une licence qui interdit la publication : dans le doute, gardez-le hors du dépôt et utilisez le glisser-déposer.
 
 ---
 
@@ -194,7 +201,7 @@ Pour que la page affiche votre modèle sans dépôt manuel, retirez `assets/mode
 | 4 Whisper, `transcript.txt`, énergie, vie procédurale | codé (whisper.cpp) ; à valider |
 | 5 Mode B : balises, Azure TTS Vivienne HD, réalignement | codé ; l'existence de la voix dans la région est vérifiée au premier appel |
 | 6 Expressions, annotation LLM, priorité des balises, fondus | codé ; à valider |
-| 7 Gestuelle : clips (retargeting par noms d'os) ou repli procédural | codé ; le retargeting suppose des poses de repos compatibles (voir ci-dessous) |
+| 7 Gestuelle : clips (retargeting par noms d'os) ou repli procédural | codé ; gestes procéduraux calibrés sur l'avatar CC0 fourni (planche de contrôle dans `avatar planche`) ; le retargeting de clips suppose des poses de repos compatibles |
 | 8 Prévisualisation avec pistes et rechargement à chaud, sorties transparentes, cache, README | fait |
 
 Limites et points de vigilance :

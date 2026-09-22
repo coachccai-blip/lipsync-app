@@ -43,6 +43,15 @@ export const DEFAULT_GESTURES: GestureConfig = {
   source: "auto",
   fadeMs: 300,
   intensity: 1,
+  // Convention d'axes (squelettes Mixamo et assimilés) : X = balancer vers l'avant, Y = pivoter
+  // sur soi-même, Z = écarter / rabattre dans le plan frontal (Z > 0 rabat le bras droit contre le
+  // corps, Z < 0 rabat le bras gauche). Les valeurs sont additives sur la pose du fichier.
+  restPose: {
+    rightArm: [0, 0, 48],
+    leftArm: [0, 0, -48],
+    rightForeArm: [10, 0, 0],
+    leftForeArm: [10, 0, 0],
+  },
   idle: { swayAmplitude: 1.2, swayPeriod: 5.5 },
   clips: {
     salut: { clip: "salut" },
@@ -55,51 +64,57 @@ export const DEFAULT_GESTURES: GestureConfig = {
     reflexion: { clip: "reflexion" },
   },
   procedural: {
+    // Axes observés sur le modèle de démonstration (squelette MPFB / Mixamo), depuis la pose de
+    // repos : bras Z<0 = lever sur le côté, bras Y>0 (droite) / Y<0 (gauche) = avancer,
+    // bras X<0 = écarter ; avant-bras Z<0 = plier vers l'avant, X<0 = plier vers le haut quand le
+    // bras est levé. Vérifiez avec `avatar planche <projet>` et ajustez ici pour un autre modèle.
     salut: {
-      duration: 1.6,
-      keyframes: [
-        { t: 0, bones: {} },
-        { t: 0.35, bones: { rightArm: [-60, 0, -75], rightForeArm: [0, 0, -95], rightHand: [0, 0, -10] } },
-        { t: 0.65, bones: { rightArm: [-60, 0, -75], rightForeArm: [0, 0, -70], rightHand: [0, 0, 20] } },
-        { t: 0.95, bones: { rightArm: [-60, 0, -75], rightForeArm: [0, 0, -95], rightHand: [0, 0, -10] } },
-        { t: 1.6, bones: {} },
-      ],
-    },
-    explication: {
       duration: 1.8,
       keyframes: [
         { t: 0, bones: {} },
-        { t: 0.4, bones: { rightArm: [-20, 0, -35], rightForeArm: [0, 40, -70], leftArm: [-15, 0, 30], leftForeArm: [0, -35, 60] } },
-        { t: 1.1, bones: { rightArm: [-25, 0, -45], rightForeArm: [0, 20, -60], leftArm: [-20, 0, 40], leftForeArm: [0, -20, 50] } },
+        { t: 0.4, bones: { rightArm: [0, 0, -105], rightForeArm: [-95, 0, 0], rightHand: [0, 0, -10] } },
+        { t: 0.7, bones: { rightArm: [0, 0, -105], rightForeArm: [-70, 0, 0], rightHand: [0, 0, 15] } },
+        { t: 1.0, bones: { rightArm: [0, 0, -105], rightForeArm: [-95, 0, 0], rightHand: [0, 0, -10] } },
+        { t: 1.3, bones: { rightArm: [0, 0, -105], rightForeArm: [-75, 0, 0], rightHand: [0, 0, 10] } },
         { t: 1.8, bones: {} },
       ],
     },
+    explication: {
+      duration: 2.0,
+      keyframes: [
+        { t: 0, bones: {} },
+        { t: 0.45, bones: { rightArm: [-5, 20, 0], rightForeArm: [0, 0, -110], leftArm: [5, -20, 0], leftForeArm: [0, 0, -110] } },
+        { t: 1.0, bones: { rightArm: [-18, 25, 0], rightForeArm: [0, 0, -95], leftArm: [18, -25, 0], leftForeArm: [0, 0, -95] } },
+        { t: 1.5, bones: { rightArm: [-5, 20, 0], rightForeArm: [0, 0, -110], leftArm: [5, -20, 0], leftForeArm: [0, 0, -110] } },
+        { t: 2.0, bones: {} },
+      ],
+    },
     index: {
-      duration: 1.5,
-      keyframes: [
-        { t: 0, bones: {} },
-        { t: 0.4, bones: { rightArm: [-45, 10, -55], rightForeArm: [0, 30, -85], rightHand: [0, 0, 0] } },
-        { t: 0.6, bones: { rightArm: [-50, 10, -60], rightForeArm: [0, 30, -80] } },
-        { t: 0.9, bones: { rightArm: [-45, 10, -55], rightForeArm: [0, 30, -85] } },
-        { t: 1.5, bones: {} },
-      ],
-    },
-    haussement_epaules: {
-      duration: 1.4,
-      keyframes: [
-        { t: 0, bones: {} },
-        { t: 0.4, bones: { leftShoulder: [0, 0, 18], rightShoulder: [0, 0, -18], leftArm: [-10, 0, 25], rightArm: [-10, 0, -25], leftForeArm: [0, -30, 55], rightForeArm: [0, 30, -55], head: [4, 0, 6] } },
-        { t: 0.9, bones: { leftShoulder: [0, 0, 18], rightShoulder: [0, 0, -18], leftArm: [-10, 0, 25], rightArm: [-10, 0, -25], leftForeArm: [0, -30, 55], rightForeArm: [0, 30, -55], head: [4, 0, 6] } },
-        { t: 1.4, bones: {} },
-      ],
-    },
-    mains_ouvertes: {
       duration: 1.6,
       keyframes: [
         { t: 0, bones: {} },
-        { t: 0.45, bones: { leftArm: [-20, 0, 40], rightArm: [-20, 0, -40], leftForeArm: [0, -50, 65], rightForeArm: [0, 50, -65], leftHand: [0, 0, 20], rightHand: [0, 0, -20] } },
-        { t: 1.0, bones: { leftArm: [-20, 0, 40], rightArm: [-20, 0, -40], leftForeArm: [0, -50, 65], rightForeArm: [0, 50, -65], leftHand: [0, 0, 20], rightHand: [0, 0, -20] } },
+        { t: 0.4, bones: { rightArm: [-8, 45, 0], rightForeArm: [0, 0, -55], rightHand: [0, 0, 10] } },
+        { t: 0.6, bones: { rightArm: [-10, 50, 0], rightForeArm: [0, 0, -45], rightHand: [0, 0, 10] } },
+        { t: 1.0, bones: { rightArm: [-8, 45, 0], rightForeArm: [0, 0, -55], rightHand: [0, 0, 10] } },
         { t: 1.6, bones: {} },
+      ],
+    },
+    haussement_epaules: {
+      duration: 1.5,
+      keyframes: [
+        { t: 0, bones: {} },
+        { t: 0.4, bones: { rightShoulder: [0, 0, -12], leftShoulder: [0, 0, 12], rightArm: [-12, 10, 0], leftArm: [12, -10, 0], rightForeArm: [0, 0, -95], leftForeArm: [0, 0, -95], rightHand: [0, 40, 0], leftHand: [0, -40, 0], head: [3, 0, 7] } },
+        { t: 1.0, bones: { rightShoulder: [0, 0, -12], leftShoulder: [0, 0, 12], rightArm: [-12, 10, 0], leftArm: [12, -10, 0], rightForeArm: [0, 0, -95], leftForeArm: [0, 0, -95], rightHand: [0, 40, 0], leftHand: [0, -40, 0], head: [3, 0, 7] } },
+        { t: 1.5, bones: {} },
+      ],
+    },
+    mains_ouvertes: {
+      duration: 1.8,
+      keyframes: [
+        { t: 0, bones: {} },
+        { t: 0.5, bones: { rightArm: [-20, 30, 0], leftArm: [20, -30, 0], rightForeArm: [0, 0, -95], leftForeArm: [0, 0, -95], rightHand: [0, 35, 0], leftHand: [0, -35, 0] } },
+        { t: 1.2, bones: { rightArm: [-20, 30, 0], leftArm: [20, -30, 0], rightForeArm: [0, 0, -95], leftForeArm: [0, 0, -95], rightHand: [0, 35, 0], leftHand: [0, -35, 0] } },
+        { t: 1.8, bones: {} },
       ],
     },
     acquiescement: {
@@ -123,12 +138,12 @@ export const DEFAULT_GESTURES: GestureConfig = {
       ],
     },
     reflexion: {
-      duration: 2.2,
+      duration: 2.4,
       keyframes: [
         { t: 0, bones: {} },
-        { t: 0.6, bones: { rightArm: [-30, 20, -25], rightForeArm: [0, 60, -120], rightHand: [20, 0, -20], head: [-4, 10, 5] } },
-        { t: 1.6, bones: { rightArm: [-30, 20, -25], rightForeArm: [0, 60, -120], rightHand: [20, 0, -20], head: [-4, 12, 6] } },
-        { t: 2.2, bones: {} },
+        { t: 0.7, bones: { rightArm: [-5, 25, 0], rightForeArm: [0, 0, -140], rightHand: [-20, 0, 0], head: [-3, 10, 6] } },
+        { t: 1.8, bones: { rightArm: [-5, 25, 0], rightForeArm: [0, 0, -140], rightHand: [-20, 0, 0], head: [-3, 12, 7] } },
+        { t: 2.4, bones: {} },
       ],
     },
   },

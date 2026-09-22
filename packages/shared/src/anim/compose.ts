@@ -7,6 +7,8 @@ import { clamp } from "../math.js";
 
 export interface FrameState {
   t: number;
+  /** Pose de repos additive (config gestures.restPose), composée avant les rotations additives. */
+  restPose: BoneRotations;
   /** Poids finaux de blendshapes (0..1), clé = nom canonique ARKit. */
   morphs: MorphWeights;
   /** Rotations additives d'os en degrés, clé = nom canonique. */
@@ -55,7 +57,7 @@ export function createAnimator(perf: Performance, cfg: AllConfig, gestures?: Ges
     }
 
     for (const k in morphs) morphs[k] = clamp(morphs[k]);
-    return { t, morphs, bones, speaking };
+    return { t, morphs, bones, speaking, restPose: cfg.gestures.restPose ?? {} };
   };
 
   return { frameAt, schedule, gestures: gestureSource };

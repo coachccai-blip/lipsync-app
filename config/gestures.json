@@ -1,8 +1,30 @@
 {
-  "_doc": "Gestes : source (auto/clips/procedural), fondu, correspondance nom -> clip (GLB ou assets/clips/<file>), et repli procédural par images clés (rotations d os en degrés).",
+  "_doc": "Gestes : source (auto/clips/procedural), fondu, restPose (pose de repos, degrés, composée avant les gestes : ramène les bras le long du corps si le modèle est en A-pose ; {} si les clips gèrent la pose), correspondance nom -> clip (GLB ou assets/clips/<file>), et repli procédural par images clés (rotations d os en degrés, additives sur la pose de repos). Vérifiez chaque geste avec `avatar planche <projet>` ; les axes dépendent du squelette (voir README).",
   "source": "auto",
   "fadeMs": 300,
   "intensity": 1,
+  "restPose": {
+    "rightArm": [
+      0,
+      0,
+      48
+    ],
+    "leftArm": [
+      0,
+      0,
+      -48
+    ],
+    "rightForeArm": [
+      10,
+      0,
+      0
+    ],
+    "leftForeArm": [
+      10,
+      0,
+      0
+    ]
+  },
   "idle": {
     "swayAmplitude": 1.2,
     "swayPeriod": 5.5
@@ -35,79 +57,6 @@
   },
   "procedural": {
     "salut": {
-      "duration": 1.6,
-      "keyframes": [
-        {
-          "t": 0,
-          "bones": {}
-        },
-        {
-          "t": 0.35,
-          "bones": {
-            "rightArm": [
-              -60,
-              0,
-              -75
-            ],
-            "rightForeArm": [
-              0,
-              0,
-              -95
-            ],
-            "rightHand": [
-              0,
-              0,
-              -10
-            ]
-          }
-        },
-        {
-          "t": 0.65,
-          "bones": {
-            "rightArm": [
-              -60,
-              0,
-              -75
-            ],
-            "rightForeArm": [
-              0,
-              0,
-              -70
-            ],
-            "rightHand": [
-              0,
-              0,
-              20
-            ]
-          }
-        },
-        {
-          "t": 0.95,
-          "bones": {
-            "rightArm": [
-              -60,
-              0,
-              -75
-            ],
-            "rightForeArm": [
-              0,
-              0,
-              -95
-            ],
-            "rightHand": [
-              0,
-              0,
-              -10
-            ]
-          }
-        },
-        {
-          "t": 1.6,
-          "bones": {}
-        }
-      ]
-    },
-    "explication": {
       "duration": 1.8,
       "keyframes": [
         {
@@ -118,49 +67,79 @@
           "t": 0.4,
           "bones": {
             "rightArm": [
-              -20,
               0,
-              -35
+              0,
+              -105
             ],
             "rightForeArm": [
+              -95,
               0,
-              40,
-              -70
+              0
             ],
-            "leftArm": [
-              -15,
+            "rightHand": [
               0,
-              30
-            ],
-            "leftForeArm": [
               0,
-              -35,
-              60
+              -10
             ]
           }
         },
         {
-          "t": 1.1,
+          "t": 0.7,
           "bones": {
             "rightArm": [
-              -25,
               0,
-              -45
+              0,
+              -105
             ],
             "rightForeArm": [
+              -70,
               0,
-              20,
-              -60
+              0
             ],
-            "leftArm": [
-              -20,
+            "rightHand": [
               0,
-              40
+              0,
+              15
+            ]
+          }
+        },
+        {
+          "t": 1,
+          "bones": {
+            "rightArm": [
+              0,
+              0,
+              -105
             ],
-            "leftForeArm": [
+            "rightForeArm": [
+              -95,
               0,
-              -20,
-              50
+              0
+            ],
+            "rightHand": [
+              0,
+              0,
+              -10
+            ]
+          }
+        },
+        {
+          "t": 1.3,
+          "bones": {
+            "rightArm": [
+              0,
+              0,
+              -105
+            ],
+            "rightForeArm": [
+              -75,
+              0,
+              0
+            ],
+            "rightHand": [
+              0,
+              0,
+              10
             ]
           }
         },
@@ -170,7 +149,168 @@
         }
       ]
     },
+    "explication": {
+      "duration": 2,
+      "keyframes": [
+        {
+          "t": 0,
+          "bones": {}
+        },
+        {
+          "t": 0.45,
+          "bones": {
+            "rightArm": [
+              -5,
+              20,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -110
+            ],
+            "leftArm": [
+              5,
+              -20,
+              0
+            ],
+            "leftForeArm": [
+              0,
+              0,
+              -110
+            ]
+          }
+        },
+        {
+          "t": 1,
+          "bones": {
+            "rightArm": [
+              -18,
+              25,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -95
+            ],
+            "leftArm": [
+              18,
+              -25,
+              0
+            ],
+            "leftForeArm": [
+              0,
+              0,
+              -95
+            ]
+          }
+        },
+        {
+          "t": 1.5,
+          "bones": {
+            "rightArm": [
+              -5,
+              20,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -110
+            ],
+            "leftArm": [
+              5,
+              -20,
+              0
+            ],
+            "leftForeArm": [
+              0,
+              0,
+              -110
+            ]
+          }
+        },
+        {
+          "t": 2,
+          "bones": {}
+        }
+      ]
+    },
     "index": {
+      "duration": 1.6,
+      "keyframes": [
+        {
+          "t": 0,
+          "bones": {}
+        },
+        {
+          "t": 0.4,
+          "bones": {
+            "rightArm": [
+              -8,
+              45,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -55
+            ],
+            "rightHand": [
+              0,
+              0,
+              10
+            ]
+          }
+        },
+        {
+          "t": 0.6,
+          "bones": {
+            "rightArm": [
+              -10,
+              50,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -45
+            ],
+            "rightHand": [
+              0,
+              0,
+              10
+            ]
+          }
+        },
+        {
+          "t": 1,
+          "bones": {
+            "rightArm": [
+              -8,
+              45,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -55
+            ],
+            "rightHand": [
+              0,
+              0,
+              10
+            ]
+          }
+        },
+        {
+          "t": 1.6,
+          "bones": {}
+        }
+      ]
+    },
+    "haussement_epaules": {
       "duration": 1.5,
       "keyframes": [
         {
@@ -180,50 +320,100 @@
         {
           "t": 0.4,
           "bones": {
+            "rightShoulder": [
+              0,
+              0,
+              -12
+            ],
+            "leftShoulder": [
+              0,
+              0,
+              12
+            ],
             "rightArm": [
-              -45,
+              -12,
               10,
-              -55
+              0
+            ],
+            "leftArm": [
+              12,
+              -10,
+              0
             ],
             "rightForeArm": [
               0,
-              30,
-              -85
+              0,
+              -95
+            ],
+            "leftForeArm": [
+              0,
+              0,
+              -95
             ],
             "rightHand": [
               0,
-              0,
+              40,
               0
+            ],
+            "leftHand": [
+              0,
+              -40,
+              0
+            ],
+            "head": [
+              3,
+              0,
+              7
             ]
           }
         },
         {
-          "t": 0.6,
+          "t": 1,
           "bones": {
+            "rightShoulder": [
+              0,
+              0,
+              -12
+            ],
+            "leftShoulder": [
+              0,
+              0,
+              12
+            ],
             "rightArm": [
-              -50,
+              -12,
               10,
-              -60
+              0
+            ],
+            "leftArm": [
+              12,
+              -10,
+              0
             ],
             "rightForeArm": [
               0,
-              30,
-              -80
-            ]
-          }
-        },
-        {
-          "t": 0.9,
-          "bones": {
-            "rightArm": [
-              -45,
-              10,
-              -55
-            ],
-            "rightForeArm": [
               0,
-              30,
-              -85
+              -95
+            ],
+            "leftForeArm": [
+              0,
+              0,
+              -95
+            ],
+            "rightHand": [
+              0,
+              40,
+              0
+            ],
+            "leftHand": [
+              0,
+              -40,
+              0
+            ],
+            "head": [
+              3,
+              0,
+              7
             ]
           }
         },
@@ -233,178 +423,85 @@
         }
       ]
     },
-    "haussement_epaules": {
-      "duration": 1.4,
-      "keyframes": [
-        {
-          "t": 0,
-          "bones": {}
-        },
-        {
-          "t": 0.4,
-          "bones": {
-            "leftShoulder": [
-              0,
-              0,
-              18
-            ],
-            "rightShoulder": [
-              0,
-              0,
-              -18
-            ],
-            "leftArm": [
-              -10,
-              0,
-              25
-            ],
-            "rightArm": [
-              -10,
-              0,
-              -25
-            ],
-            "leftForeArm": [
-              0,
-              -30,
-              55
-            ],
-            "rightForeArm": [
-              0,
-              30,
-              -55
-            ],
-            "head": [
-              4,
-              0,
-              6
-            ]
-          }
-        },
-        {
-          "t": 0.9,
-          "bones": {
-            "leftShoulder": [
-              0,
-              0,
-              18
-            ],
-            "rightShoulder": [
-              0,
-              0,
-              -18
-            ],
-            "leftArm": [
-              -10,
-              0,
-              25
-            ],
-            "rightArm": [
-              -10,
-              0,
-              -25
-            ],
-            "leftForeArm": [
-              0,
-              -30,
-              55
-            ],
-            "rightForeArm": [
-              0,
-              30,
-              -55
-            ],
-            "head": [
-              4,
-              0,
-              6
-            ]
-          }
-        },
-        {
-          "t": 1.4,
-          "bones": {}
-        }
-      ]
-    },
     "mains_ouvertes": {
-      "duration": 1.6,
+      "duration": 1.8,
       "keyframes": [
         {
           "t": 0,
           "bones": {}
         },
         {
-          "t": 0.45,
+          "t": 0.5,
           "bones": {
-            "leftArm": [
-              -20,
-              0,
-              40
-            ],
             "rightArm": [
               -20,
-              0,
-              -40
+              30,
+              0
             ],
-            "leftForeArm": [
-              0,
-              -50,
-              65
+            "leftArm": [
+              20,
+              -30,
+              0
             ],
             "rightForeArm": [
               0,
-              50,
-              -65
+              0,
+              -95
             ],
-            "leftHand": [
+            "leftForeArm": [
               0,
               0,
-              20
+              -95
             ],
             "rightHand": [
               0,
+              35,
+              0
+            ],
+            "leftHand": [
               0,
-              -20
+              -35,
+              0
             ]
           }
         },
         {
-          "t": 1,
+          "t": 1.2,
           "bones": {
-            "leftArm": [
-              -20,
-              0,
-              40
-            ],
             "rightArm": [
               -20,
-              0,
-              -40
+              30,
+              0
             ],
-            "leftForeArm": [
-              0,
-              -50,
-              65
+            "leftArm": [
+              20,
+              -30,
+              0
             ],
             "rightForeArm": [
               0,
-              50,
-              -65
+              0,
+              -95
             ],
-            "leftHand": [
+            "leftForeArm": [
               0,
               0,
-              20
+              -95
             ],
             "rightHand": [
               0,
+              35,
+              0
+            ],
+            "leftHand": [
               0,
-              -20
+              -35,
+              0
             ]
           }
         },
         {
-          "t": 1.6,
+          "t": 1.8,
           "bones": {}
         }
       ]
@@ -496,64 +593,64 @@
       ]
     },
     "reflexion": {
-      "duration": 2.2,
+      "duration": 2.4,
       "keyframes": [
         {
           "t": 0,
           "bones": {}
         },
         {
-          "t": 0.6,
+          "t": 0.7,
           "bones": {
             "rightArm": [
-              -30,
-              20,
-              -25
+              -5,
+              25,
+              0
             ],
             "rightForeArm": [
               0,
-              60,
-              -120
+              0,
+              -140
             ],
             "rightHand": [
-              20,
+              -20,
               0,
-              -20
+              0
             ],
             "head": [
-              -4,
+              -3,
               10,
-              5
-            ]
-          }
-        },
-        {
-          "t": 1.6,
-          "bones": {
-            "rightArm": [
-              -30,
-              20,
-              -25
-            ],
-            "rightForeArm": [
-              0,
-              60,
-              -120
-            ],
-            "rightHand": [
-              20,
-              0,
-              -20
-            ],
-            "head": [
-              -4,
-              12,
               6
             ]
           }
         },
         {
-          "t": 2.2,
+          "t": 1.8,
+          "bones": {
+            "rightArm": [
+              -5,
+              25,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -140
+            ],
+            "rightHand": [
+              -20,
+              0,
+              0
+            ],
+            "head": [
+              -3,
+              12,
+              7
+            ]
+          }
+        },
+        {
+          "t": 2.4,
           "bones": {}
         }
       ]

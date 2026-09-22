@@ -1,6 +1,6 @@
 {
   "_doc": "Modèle, résolution, cadence, cadrage caméra, éclairage (positions relatives au centre du cadre), bulle, fond vert et paramètres de vie procédurale. Tout est éditable ; la prévisualisation se recharge à chaud.",
-  "model": "assets/models/personnage.glb",
+  "model": "assets/models/mpfb-cc0.glb",
   "resolution": {
     "width": 1080,
     "height": 1080

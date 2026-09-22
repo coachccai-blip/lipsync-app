@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { PerformanceValidationError, makeTestPerformance } from "@avatar/shared";
 import { ToolNotFoundError, configVocab, loadConfig, loadPerformance, log, prepare, repoRoot, resolveTool, run, writePerformance } from "@avatar/pipeline";
-import { renderProject, startServer, type OutputFormat } from "@avatar/renderer";
+import { renderPoseSheet, renderProject, startServer, type OutputFormat } from "@avatar/renderer";
 
 loadEnv({ path: path.join(repoRoot(), ".env") });
 
@@ -83,6 +83,32 @@ program
     writePerformance(projet, perf);
     log.done(`Projet de test créé : ${projet}`);
     log.info(`Suite : avatar render ${projet} --format mp4`);
+  });
+
+program
+  .command("planche")
+  .description("Planche de contrôle : pose de repos, chaque geste procédural et (option) chaque émotion en une image PNG")
+  .argument("<projet>", "dossier projet (sert pour l'audio et la config)")
+  .option("--out <fichier>", "image de sortie (défaut : <projet>/planche.png)")
+  .option("--emotions", "ajoute une vignette par émotion")
+  .option("--os <liste>", "rotations d'os à tester au lieu des gestes, ex. \"rightArm=0,0,-100;rightForeArm=-90,0,0\" (plusieurs vignettes séparées par |)")
+  .option("--tile <px>", "taille d'une vignette", num, 400)
+  .action(async (projet: string, opts) => {
+    let bones: Record<string, Record<string, [number, number, number]>> | undefined;
+    if (opts.os) {
+      bones = {};
+      for (const group of String(opts.os).split("|")) {
+        const rot: Record<string, [number, number, number]> = {};
+        for (const item of group.split(";")) {
+          const [name, values] = item.split("=");
+          if (!name || !values) continue;
+          const [x, y, z] = values.split(",").map(Number);
+          rot[name.trim()] = [x || 0, y || 0, z || 0];
+        }
+        bones[group.trim()] = rot;
+      }
+    }
+    await renderPoseSheet({ projectDir: projet, out: opts.out ?? path.join(projet, "planche.png"), bones, emotions: opts.emotions, tile: opts.tile });
   });
 
 program

@@ -182,16 +182,28 @@ async function greenRatio(root: THREE.Object3D, greenColor: string): Promise<num
 const euler = new THREE.Euler();
 const q = new THREE.Quaternion();
 
-/** Applique un état d'image (poids de blendshapes + rotations d'os additives) au modèle. */
+const restQ = new THREE.Quaternion();
+
+function eulerDegToQuat(rot: [number, number, number], out: THREE.Quaternion): THREE.Quaternion {
+  euler.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]), "XYZ");
+  return out.setFromEuler(euler);
+}
+
+/**
+ * Applique un état d'image au modèle. Rotations composées dans l'ordre :
+ * pose du fichier (ou clip) × pose de repos (config) × rotations additives (vie, gestes),
+ * chacune exprimée dans le repère local de l'os tel qu'il est après l'étape précédente.
+ */
 export function applyFrame(model: LoadedModel, frame: FrameState, beforeAdditive?: () => void): void {
   for (const b of model.bones.values()) b.bone.quaternion.copy(b.rest);
   beforeAdditive?.();
+  for (const [name, rot] of Object.entries(frame.restPose ?? {})) {
+    const b = model.bones.get(name);
+    if (b) b.bone.quaternion.multiply(eulerDegToQuat(rot, restQ));
+  }
   for (const [name, rot] of Object.entries(frame.bones)) {
     const b = model.bones.get(name);
-    if (!b) continue;
-    euler.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]), "XYZ");
-    q.setFromEuler(euler);
-    b.bone.quaternion.multiply(q);
+    if (b) b.bone.quaternion.multiply(eulerDegToQuat(rot, q));
   }
   for (const { mesh, indices } of model.morphs) {
     const inf = mesh.morphTargetInfluences;
