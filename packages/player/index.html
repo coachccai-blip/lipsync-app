@@ -4,42 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Avatar Studio</title>
-    <style>
-      :root {
-        --page-w: 1080px;
-        --page-h: 1080px;
-        --page-bg: #00ff00;
-        --ui-bg: #14161a;
-        --ui-fg: #e8e8e8;
-        --ui-muted: #9aa0a6;
-        --ui-accent: #7cc4ff;
-      }
-      html, body { margin: 0; padding: 0; }
-      body { background: var(--page-bg); color: var(--ui-fg); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-      body.ui { background: var(--ui-bg); }
-      /* Zone capturée par Puppeteer : exactement la résolution de sortie. */
-      #page { position: relative; width: var(--page-w); height: var(--page-h); background: var(--page-bg); overflow: hidden; }
-      body.transparent #page, body.transparent { background: transparent; }
-      #bubble { position: absolute; border-radius: 50%; overflow: hidden; }
-      #bubble canvas { display: block; }
-      #ring { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
-      #viewport { transform-origin: top left; }
-      #ui { display: none; padding: 12px 16px 24px; max-width: 1400px; }
-      body.ui #ui { display: block; }
-      #ui .row { display: flex; align-items: center; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
-      #ui button { background: #2a2f36; color: var(--ui-fg); border: 1px solid #3a4048; border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; }
-      #ui button:hover { border-color: var(--ui-accent); }
-      #ui input[type=range] { flex: 1; min-width: 200px; }
-      #time { font-variant-numeric: tabular-nums; min-width: 120px; color: var(--ui-muted); }
-      #tracks { display: block; width: 100%; height: 190px; background: #0d0f12; border: 1px solid #2a2f36; border-radius: 6px; cursor: crosshair; }
-      #report { white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--ui-muted); background: #0d0f12; border: 1px solid #2a2f36; border-radius: 6px; padding: 10px; max-height: 260px; overflow: auto; }
-      #drop { border: 1px dashed #3a4048; border-radius: 6px; padding: 10px 12px; color: var(--ui-muted); }
-      #drop.over { border-color: var(--ui-accent); color: var(--ui-fg); }
-      #status { color: var(--ui-muted); }
-      .warn { color: #ffcc66; }
-      .err { color: #ff7a7a; }
-      a { color: var(--ui-accent); }
-    </style>
   </head>
   <body>
     <div id="viewport">
@@ -47,23 +11,7 @@
         <div id="bubble"><div id="ring"></div></div>
       </div>
     </div>
-    <div id="ui">
-      <div class="row">
-        <button id="play" title="Espace">▶ Lecture</button>
-        <span id="time">0.00 / 0.00 s</span>
-        <input id="seek" type="range" min="0" max="1000" value="0" />
-        <label><input id="loop" type="checkbox" checked /> boucle</label>
-        <span id="status"></span>
-      </div>
-      <canvas id="tracks"></canvas>
-      <div class="row">
-        <div id="drop">Déposez ici un modèle <b>.glb</b>, un <b>performance.json</b> et/ou un fichier audio pour les charger dans la page.</div>
-      </div>
-      <details open>
-        <summary>Rapport de chargement</summary>
-        <div id="report">…</div>
-      </details>
-    </div>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

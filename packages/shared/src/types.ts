@@ -171,6 +171,8 @@ export interface SceneConfig {
     /** Diamètre en pixels (ou 'auto' = min(width, height) - 2*margin). */
     diameter: number | "auto";
     margin: number;
+    /** Position du centre de la bulle : 'center' ou pixels depuis le bord gauche / haut. */
+    position: { x: number | "center"; y: number | "center" };
     background: string;
     ring: { enabled: boolean; width: number; color: string };
   };

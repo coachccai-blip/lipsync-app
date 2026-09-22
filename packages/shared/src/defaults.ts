@@ -180,6 +180,7 @@ export const DEFAULT_SCENE: SceneConfig = {
   bubble: {
     diameter: "auto",
     margin: 40,
+    position: { x: "center", y: "center" },
     background: "radial-gradient(circle at 50% 35%, #fff7e6 0%, #f3d9b1 60%, #e6c28f 100%)",
     ring: { enabled: true, width: 14, color: "#ffffff" },
   },

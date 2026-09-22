@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Browser, Page } from "puppeteer-core";
-import { log, repoRoot } from "@avatar/pipeline";
+import { log, repoRoot, wordsToSrt } from "@avatar/pipeline";
 import type { Performance, AllConfig } from "@avatar/shared";
 import { launchChrome } from "./chrome.js";
 import { FORMAT_EXT, FORMAT_TRANSPARENT, startEncoder, type OutputFormat } from "./ffmpeg.js";
@@ -26,6 +26,12 @@ export interface RenderOptions {
   skipEncode?: boolean;
   onProgress?: (done: number, total: number) => void;
   quiet?: boolean;
+  /** Rendu brouillon : résolution divisée par ce facteur (2 = quatre fois plus rapide). */
+  scale?: number;
+  /** Écrit aussi les sous-titres SRT (mots horodatés) à côté de la vidéo. */
+  srt?: boolean;
+  /** Annulation (studio). */
+  signal?: AbortSignal;
 }
 
 export interface RenderResult {
@@ -47,10 +53,19 @@ export interface OpenedPage {
 }
 
 /** Démarre serveur + Chrome, charge la page et le projet. */
-export async function openProject(o: { projectDir: string; root?: string; chromePath?: string; software?: boolean; transparent?: boolean }): Promise<OpenedPage> {
+export async function openProject(o: { projectDir: string; root?: string; chromePath?: string; software?: boolean; transparent?: boolean; scale?: number }): Promise<OpenedPage> {
   const root = o.root ?? repoRoot();
   const server = await startServer({ projectDir: o.projectDir, root, background: o.transparent ? "transparent" : "green" });
   const payload = server.payload() as { performance: Performance; config: AllConfig; modelUrl?: string; modelPath: string };
+  if (o.scale && o.scale !== 1) {
+    const k = 1 / o.scale;
+    const b = payload.config.scene.bubble;
+    payload.config.scene.resolution = { width: Math.round(payload.config.scene.resolution.width * k), height: Math.round(payload.config.scene.resolution.height * k) };
+    b.margin = Math.round(b.margin * k);
+    if (b.diameter !== "auto") b.diameter = Math.round(b.diameter * k);
+    b.ring.width = Math.max(1, Math.round(b.ring.width * k));
+    b.position = { x: b.position.x === "center" ? "center" : Math.round(b.position.x * k), y: b.position.y === "center" ? "center" : Math.round(b.position.y * k) };
+  }
   if (!payload.modelUrl) log.warn(`Modèle ${payload.modelPath} introuvable : rendu avec le personnage de substitution.`);
   const browser = await launchChrome({ executablePath: o.chromePath, gpu: o.software ? false : undefined });
   const page = await browser.newPage();
@@ -85,7 +100,7 @@ function printReport(report: Record<string, unknown>): void {
 /** `avatar render` : boucle image par image, capture PNG, encodage ffmpeg. */
 export async function renderProject(o: RenderOptions): Promise<RenderResult> {
   const transparent = FORMAT_TRANSPARENT[o.format];
-  const opened = await openProject({ projectDir: o.projectDir, root: o.root, chromePath: o.chromePath, software: o.software, transparent });
+  const opened = await openProject({ projectDir: o.projectDir, root: o.root, chromePath: o.chromePath, software: o.software, transparent, scale: o.scale });
   try {
     if (!o.quiet) printReport(opened.report);
     const { performance: perf, config } = opened;
@@ -106,6 +121,10 @@ export async function renderProject(o: RenderOptions): Promise<RenderResult> {
     const hashes: string[] = [];
     const t0 = Date.now();
     for (let n = firstFrame; n < lastFrame; n++) {
+      if (o.signal?.aborted) {
+        encoder?.process.kill("SIGKILL");
+        throw new Error("Rendu annulé");
+      }
       const t = n / fps;
       await opened.page.evaluate((tt) => window.renderFrame(tt), t);
       const png = Buffer.from(await opened.page.screenshot({ type: "png", omitBackground: transparent, clip: { x: 0, y: 0, width, height }, captureBeyondViewport: false, optimizeForSpeed: true }));
@@ -126,6 +145,13 @@ export async function renderProject(o: RenderOptions): Promise<RenderResult> {
       log.info("Encodage final…");
       await encoder.finish();
       log.done(`Vidéo écrite : ${output} (${total} images, ${(total / fps).toFixed(2)} s)`);
+    }
+    if (o.srt) {
+      const srtFile = output.replace(/\.[^.]+$/, "") + ".srt";
+      const start = firstFrame / fps;
+      const words = perf.words.filter((w) => w.end > start && w.start < lastFrame / fps);
+      writeFileSync(srtFile, wordsToSrt(words, { offset: -start }));
+      log.done(`Sous-titres écrits : ${srtFile}`);
     }
     return { output: encoder ? output : undefined, frames: total, duration: total / fps, hashes, report: opened.report };
   } finally {

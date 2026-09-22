@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { PerformanceValidationError, makeTestPerformance } from "@avatar/shared";
 import { ToolNotFoundError, configVocab, loadConfig, loadPerformance, log, prepare, repoRoot, resolveTool, run, writePerformance } from "@avatar/pipeline";
-import { renderPoseSheet, renderProject, startServer, type OutputFormat } from "@avatar/renderer";
+import { FORMAT_EXT, renderPoseSheet, renderProject, startServer, type OutputFormat } from "@avatar/renderer";
 
 loadEnv({ path: path.join(repoRoot(), ".env") });
 
@@ -34,20 +34,33 @@ program
     log.info(`Suite : avatar preview ${opts.out}   puis   avatar render ${opts.out} --format mp4`);
   });
 
+async function launchStudio(opts: { port: number; transparent?: boolean; projet?: string; noOpen?: boolean }): Promise<void> {
+  const server = await startServer({ projectDir: opts.projet, port: opts.port, watch: true, background: opts.transparent ? "transparent" : "green" });
+  const url = `${server.url}/index.html?mode=studio${opts.projet ? `&project=${encodeURIComponent(path.basename(path.resolve(opts.projet)))}` : ""}`;
+  log.done(`Studio : ${url}`);
+  log.info("Préparation, rendu, réglages et pistes se font dans la page. Ctrl+C pour arrêter.");
+  if (!opts.noOpen) await openBrowser(url);
+  await new Promise(() => undefined);
+}
+
+program
+  .command("studio")
+  .description("Ouvre le studio (projets, préparation, pistes, réglages, rendu) dans le navigateur")
+  .option("--port <n>", "port HTTP (défaut : 4242)", num, 4242)
+  .option("--transparent", "fond transparent au lieu du fond vert")
+  .option("--no-open", "n'ouvre pas le navigateur")
+  .action(async (opts) => launchStudio({ port: opts.port, transparent: opts.transparent, noOpen: opts.open === false }));
+
 program
   .command("preview")
-  .description("Ouvre la prévisualisation temps réel (pistes, rechargement à chaud de performance.json et config/)")
+  .description("Ouvre le studio sur un projet donné (prévisualisation temps réel, rechargement à chaud)")
   .argument("<projet>", "dossier projet")
   .option("--port <n>", "port HTTP (défaut : 4242)", num, 4242)
   .option("--transparent", "fond transparent au lieu du fond vert")
+  .option("--no-open", "n'ouvre pas le navigateur")
   .action(async (projet: string, opts) => {
     loadPerformance(projet, configVocab(loadConfig()));
-    const server = await startServer({ projectDir: projet, port: opts.port, watch: true, background: opts.transparent ? "transparent" : "green" });
-    const url = `${server.url}/index.html?mode=preview`;
-    log.done(`Prévisualisation : ${url}`);
-    log.info("Modifiez performance.json ou config/*.json : la page se recharge toute seule. Ctrl+C pour arrêter.");
-    await openBrowser(url);
-    await new Promise(() => undefined);
+    await launchStudio({ port: opts.port, transparent: opts.transparent, projet, noOpen: opts.open === false });
   });
 
 program
@@ -60,10 +73,13 @@ program
   .option("--fin <s>", "fin de l'extrait en secondes", num)
   .option("--frames <dossier>", "écrit aussi les PNG dans ce dossier")
   .option("--software", "force le rendu WebGL logiciel (SwiftShader)")
+  .option("--brouillon", "rendu rapide en demi-résolution (sortie-brouillon.*)")
+  .option("--srt", "écrit aussi les sous-titres SRT à côté de la vidéo")
   .action(async (projet: string, opts) => {
     const format = opts.format as OutputFormat;
     if (!["mp4", "prores4444", "webm-alpha"].includes(format)) throw new Error(`Format inconnu : ${format} (mp4, prores4444, webm-alpha)`);
-    await renderProject({ projectDir: projet, format, out: opts.out, debut: opts.debut, fin: opts.fin, framesDir: opts.frames, software: opts.software });
+    const out = opts.out ?? (opts.brouillon ? path.join(projet, `sortie-brouillon${FORMAT_EXT[format]}`) : undefined);
+    await renderProject({ projectDir: projet, format, out, debut: opts.debut, fin: opts.fin, framesDir: opts.frames, software: opts.software, scale: opts.brouillon ? 2 : 1, srt: opts.srt });
   });
 
 program

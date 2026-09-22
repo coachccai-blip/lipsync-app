@@ -1,6 +1,6 @@
 import type { AllConfig, Performance } from "@avatar/shared";
 
-export type PlayerMode = "render" | "preview" | "demo";
+export type PlayerMode = "render" | "studio" | "demo";
 
 export interface ProjectPayload {
   performance: Performance;

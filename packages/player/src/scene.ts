@@ -31,49 +31,62 @@ export class Stage {
   readonly page: HTMLElement;
   readonly bubble: HTMLElement;
   readonly ring: HTMLElement;
-  readonly diameter: number;
   private keyLight!: THREE.DirectionalLight;
   private lights: THREE.Object3D[] = [];
   private pmrem?: THREE.PMREMGenerator;
 
-  constructor(readonly cfg: SceneConfig, background: "green" | "transparent") {
+  cfg: SceneConfig;
+  diameter = 0;
+  private lastBox?: THREE.Box3;
+
+  constructor(cfg: SceneConfig, background: "green" | "transparent") {
+    this.cfg = cfg;
     this.page = document.getElementById("page")!;
     this.bubble = document.getElementById("bubble")!;
     this.ring = document.getElementById("ring")!;
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true, powerPreference: "high-performance" });
+    this.renderer.setPixelRatio(1);
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.bubble.insertBefore(this.renderer.domElement, this.ring);
+    this.camera = new THREE.PerspectiveCamera(cfg.camera.fov, 1, 0.05, 100);
+    this.applyConfig(cfg, background);
+  }
+
+  /** Applique (ou ré-applique) résolution, bulle, fond, éclairage et caméra sans recréer le renderer. */
+  applyConfig(cfg: SceneConfig, background: "green" | "transparent"): void {
+    this.cfg = cfg;
     const { width, height } = cfg.resolution;
     document.documentElement.style.setProperty("--page-w", `${width}px`);
     document.documentElement.style.setProperty("--page-h", `${height}px`);
     document.documentElement.style.setProperty("--page-bg", cfg.background.color);
     document.body.classList.toggle("transparent", background === "transparent");
-
     this.diameter = cfg.bubble.diameter === "auto" ? Math.min(width, height) - 2 * cfg.bubble.margin : cfg.bubble.diameter;
     const d = this.diameter;
+    const cx = cfg.bubble.position?.x === "center" || cfg.bubble.position === undefined ? width / 2 : cfg.bubble.position.x;
+    const cy = cfg.bubble.position?.y === "center" || cfg.bubble.position === undefined ? height / 2 : cfg.bubble.position.y;
     Object.assign(this.bubble.style, {
       width: `${d}px`,
       height: `${d}px`,
-      left: `${Math.round((width - d) / 2)}px`,
-      top: `${Math.round((height - d) / 2)}px`,
+      left: `${Math.round(cx - d / 2)}px`,
+      top: `${Math.round(cy - d / 2)}px`,
       background: cfg.bubble.background,
     });
     this.ring.style.boxShadow = cfg.bubble.ring.enabled ? `inset 0 0 0 ${cfg.bubble.ring.width}px ${cfg.bubble.ring.color}` : "none";
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(1);
-    this.renderer.setSize(d, d, false);
-    this.renderer.setClearColor(0x000000, 0);
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    if (this.renderer.domElement.width !== d) this.renderer.setSize(d, d, false);
     this.renderer.toneMappingExposure = cfg.lighting.exposure;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.bubble.insertBefore(this.renderer.domElement, this.ring);
-
-    this.camera = new THREE.PerspectiveCamera(cfg.camera.fov, 1, 0.05, 100);
     this.setupLights();
+    if (this.lastBox) this.frame(this.lastBox);
   }
 
   private setupLights(): void {
-    for (const l of this.lights) this.scene.remove(l);
+    for (const l of this.lights) {
+      this.scene.remove(l);
+      if (l instanceof THREE.Light) l.dispose();
+    }
     this.lights = [];
     const L = this.cfg.lighting;
     const add = (o: THREE.Object3D) => {
@@ -122,6 +135,7 @@ export class Stage {
    * Les lumières visent le centre du cadre et l'ombre de la lumière principale couvre le modèle.
    */
   frame(box: THREE.Box3): void {
+    this.lastBox = box;
     const c = this.cfg.camera;
     const size = new THREE.Vector3();
     box.getSize(size);

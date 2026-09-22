@@ -14,3 +14,5 @@ export * from "./annotate.js";
 export * from "./config.js";
 export * from "./project.js";
 export * from "./prepare.js";
+export * from "./srt.js";
+export * from "./projects.js";

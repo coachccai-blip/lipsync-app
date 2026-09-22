@@ -9,7 +9,9 @@ npm run avatar -- prepare --audio voix.mp3 --out projets/demo
 # Mode B : depuis un texte (synthèse vocale Azure, voix fr-FR-Vivienne HD)
 npm run avatar -- prepare --texte script.txt --out projets/demo
 
-# Vérifier et retoucher avant rendu (prévisualisation temps réel, rechargement à chaud)
+# Studio : projets, préparation, pistes éditables, réglages en direct, rendu (dans le navigateur)
+npm run avatar -- studio
+# ou la prévisualisation d'un projet donné
 npm run avatar -- preview projets/demo
 
 # Rendu final (hors ligne, image par image, déterministe)
@@ -59,14 +61,30 @@ Sans modèle, un **personnage de substitution** procédural (tête, yeux, sourci
 
 ## 2. Utilisation
 
+### Le studio (recommandé)
+
+`npm run avatar -- studio` ouvre une application locale dans le navigateur :
+
+- **Projet** : créer un projet, déposer un enregistrement de voix ou un script texte, lancer la préparation (journal en direct), corriger la transcription, lire le rapport de chargement du modèle.
+- **Scène et transport** : lecture avec l'audio, image par image (← →), boucle, zoom de la timeline.
+- **Pistes** : timeline éditable (mots, visèmes, émotions, gestes, énergie, accents) : clic pour sélectionner, glisser pour déplacer, double-clic pour ajouter, Suppr pour supprimer, formulaire d'édition ; `performance.json` est enregistré automatiquement et validé.
+- **Réglages** : format et position de la bulle (préréglages carré, paysage bulle à droite ou à gauche, portrait), cadrage, lumière, bouche, expressions, vie procédurale, gestes ; chaque curseur s'applique immédiatement, « Enregistrer » écrit dans `config/`.
+- **Rendu** : mp4 fond vert, ProRes 4444 ou WebM alpha, extrait `--debut/--fin`, **brouillon** (demi-résolution, quatre fois plus rapide), **sous-titres SRT**, planche de contrôle, liste des fichiers produits avec aperçu.
+- **Journal** : file des jobs (préparation, rendu, planche), progression, annulation, journal complet.
+
+Les fichiers restent la source de vérité : modifier `performance.json` ou `config/*.json` à la main recharge le studio à chaud, et la CLI reste utilisable en parallèle.
+
+### La ligne de commande
+
 | Commande | Rôle |
 |---|---|
+| `avatar studio [--port 4242] [--transparent] [--no-open]` | ouvre le studio sur tous les projets de `projets/` |
 | `avatar prepare --audio X --out DIR` | mode A : normalisation → Whisper → Rhubarb → énergie → annotation LLM → `performance.json` |
 | `avatar prepare --texte X --out DIR` | mode B : balises → Azure TTS → normalisation → Whisper → réalignement script ↔ Whisper → … |
 | `avatar prepare … --sans-llm` | pas d'appel Anthropic : expressions et gestes issus des balises et du procédural |
 | `avatar prepare … --force` | ignore le cache |
-| `avatar preview DIR [--port 4242] [--transparent]` | prévisualisation temps réel avec pistes (mots, visèmes, émotions, gestes, énergie, accents) ; `performance.json` et `config/*.json` sont rechargés à chaud |
-| `avatar render DIR --format mp4\|prores4444\|webm-alpha [--debut s] [--fin s] [--out f] [--frames dir]` | rendu déterministe avec barre de progression |
+| `avatar preview DIR [--port 4242] [--transparent]` | ouvre le studio directement sur un projet |
+| `avatar render DIR --format mp4\|prores4444\|webm-alpha [--debut s] [--fin s] [--out f] [--frames dir] [--brouillon] [--srt]` | rendu déterministe avec barre de progression ; `--brouillon` = demi-résolution rapide, `--srt` = sous-titres à côté de la vidéo |
 | `avatar planche DIR [--emotions] [--os "rightArm=0,0,-100;rightForeArm=-90,0,0\|head=0,30,0"]` | planche de contrôle PNG : pose de repos, chaque geste procédural à mi-parcours, chaque émotion, ou des rotations d'os à tester ; sert à régler `config/gestures.json` à l'œil |
 | `avatar test-project DIR [--duree 4] [--visemes]` | projet de test : son de test (bip chaque seconde) + animation de test (rotation de tête, `jawOpen` sinusoïdal) |
 | `avatar check` | vérifie outils, variables d'environnement, modèle et player |
@@ -118,7 +136,7 @@ Tout ce qui est esthétique est dans `config/` ; la prévisualisation se recharg
 
 | Fichier | À regarder / régler |
 |---|---|
-| `scene.json` | `model`, `resolution`, `fps`, `padding` ; **cadrage** (`camera.bottomRatio` = fraction de la hauteur du modèle où commence le cadre, `marginTop`, `distanceScale`, `heightOffset`, `fov`) ; **éclairage** trois points + `eyeCatch` (positions relatives au centre du cadre), `exposure`, `environment` ; **bulle** (`diameter`, `margin`, `background` CSS, `ring`) ; fond vert (`background.color`) ; **vie procédurale** (`life.blink`, `gaze`, `breathing`, `head`, `brows`) |
+| `scene.json` | `model`, `resolution`, `fps`, `padding` ; **bulle** (`bubble.diameter`, `margin`, `position` = centre en pixels ou `center`, fond CSS, anneau) ; **cadrage** (`camera.bottomRatio` = fraction de la hauteur du modèle où commence le cadre, `marginTop`, `distanceScale`, `heightOffset`, `fov`) ; **éclairage** trois points + `eyeCatch` (positions relatives au centre du cadre), `exposure`, `environment` ; **bulle** (`diameter`, `margin`, `background` CSS, `ring`) ; fond vert (`background.color`) ; **vie procédurale** (`life.blink`, `gaze`, `breathing`, `head`, `brows`) |
 | `visemes.json` | poids de blendshapes par forme Rhubarb (A…H, X), `transitionMs` (60–90), `anticipationMs` (30–50), `exaggeration` (1.2), `energyInfluence` |
 | `emotions.json` | pose de chaque émotion, `fadeMs` (400), `speechAttenuation` (atténuation de la zone bouche pendant la parole) |
 | `gestures.json` | `source` (`auto` / `clips` / `procedural`), `fadeMs`, `intensity`, `idle` (balancement ou clip de repos), correspondance nom → clip, gestes procéduraux par images clés (rotations d'os en degrés) |
@@ -138,9 +156,9 @@ Points à vérifier à l'œil : cadrage (marge au-dessus de la tête, place pour
 packages/
   shared/     types, validation de performance.json, PRNG, les 4 couches d'animation (fonctions pures de t)
   pipeline/   audio, tts (Azure), transcribe (whisper.cpp), align, tags, rhubarb, energy, annotate (Anthropic), cache, prepare
-  player/     page Three.js : scène, bulle, modèle, clips, prévisualisation, window.loadProject / renderFrame(t) / getDuration
-  renderer/   serveur local, Chrome headless (Puppeteer), capture PNG → ffmpeg
-  cli/        commandes prepare, preview, render, test-project, check
+  player/     page Three.js : scène, bulle, modèle, clips, window.loadProject / renderFrame(t) ; ui/ = studio (timeline, panneaux)
+  renderer/   serveur local et API du studio (projets, config, jobs, journal), Chrome headless (Puppeteer), capture PNG → ffmpeg, planche
+  cli/        commandes studio, preview, prepare, render, planche, test-project, check
 config/       scene.json, visemes.json, emotions.json, gestures.json, bones.json
 assets/       models/ (GLB, non versionné), clips/ (animations externes)
 scripts/      setup, inspect-model, smoke
