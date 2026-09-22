@@ -1,10 +1,11 @@
 import type { AllConfig, ExpressionSegment, GestureEvent, Performance } from "@avatar/shared";
 import { normalizePerformance, validatePerformance } from "@avatar/shared";
 import type { LoadReport, ProjectPayload } from "../api.js";
-import { api, type JobEvent, type JobSummary, type ProjectSummary, type StudioPayload } from "./api.js";
+import { api, type CheckItem, type JobEvent, type JobSummary, type ProjectSummary } from "./api.js";
 import { FORMAT_PRESETS, SECTIONS, buildControls } from "./controls.js";
 import { clear, download, fmtBytes, fmtTime, h, icon } from "./dom.js";
-import { EMOTION_COLORS, Timeline, type Selection } from "./timeline.js";
+import { EMOTION_COLORS, Timeline } from "./timeline.js";
+import { PoseEditor } from "./poses.js";
 
 export interface PlayerLike {
   load(payload: ProjectPayload): Promise<LoadReport>;
@@ -12,14 +13,16 @@ export interface PlayerLike {
   report?: LoadReport;
 }
 
-type Tab = "projet" | "pistes" | "reglages" | "rendu" | "journal";
+type Tab = "projet" | "pistes" | "reglages" | "poses" | "rendu" | "journal";
 const TABS: { id: Tab; label: string }[] = [
   { id: "projet", label: "Projet" },
   { id: "pistes", label: "Pistes" },
   { id: "reglages", label: "Réglages" },
+  { id: "poses", label: "Poses" },
   { id: "rendu", label: "Rendu" },
   { id: "journal", label: "Journal" },
 ];
+const JOB_LABELS: Record<JobSummary["type"], string> = { prepare: "Préparation", render: "Rendu", planche: "Planche", image: "Image" };
 
 /**
  * Application studio : projets, préparation, lecture, timeline éditable, réglages en direct,
@@ -51,6 +54,15 @@ export class StudioApp {
   private activeJobId?: string;
   private prepareInput?: { kind: "audio" | "texte"; file: string };
   private busy = false;
+  private history: string[] = [];
+  private future: string[] = [];
+  private poseEditor = new PoseEditor({
+    onPreview: (m) => window.setOverrideMorphs(m),
+    onChange: (file) => this.onConfigEdited(file),
+    onSave: (file) => void this.saveConfig(file),
+  });
+  private envItems?: CheckItem[];
+  private models: string[] = [];
   private els!: {
     projectSelect: HTMLSelectElement;
     chips: HTMLElement;
@@ -79,6 +91,7 @@ export class StudioApp {
       },
       onChange: () => this.onPerfEdited(),
     });
+    this.timeline.beforeChange = () => this.pushHistory();
     window.addEventListener("resize", () => this.fit());
     document.addEventListener("keydown", (e) => this.onKey(e));
     requestAnimationFrame(() => this.tick());
@@ -94,6 +107,12 @@ export class StudioApp {
       if (wanted) await this.openProject(wanted);
       this.listenChanges();
       void this.refreshJobs();
+      void api.check().then((r) => {
+        this.envItems = r.items;
+        this.models = r.models;
+        const missing = r.items.filter((i) => !i.ok && ["ffmpeg", "chrome", "player"].includes(i.id));
+        if (missing.length) this.toast(`Outils manquants : ${missing.map((m) => m.label).join(", ")} (onglet Journal → Environnement)`, "warn", 8000);
+      }).catch(() => undefined);
     } catch (e) {
       this.toast(`Impossible de joindre le serveur du studio : ${(e as Error).message}`, "err");
     }
@@ -181,6 +200,7 @@ export class StudioApp {
   }
 
   private showTab(tab: Tab): void {
+    if (this.tab === "poses" && tab !== "poses") this.poseEditor.stopPreview();
     this.tab = tab;
     for (const t of TABS) {
       this.els.tabs[t.id].classList.toggle("active", t.id === tab);
@@ -398,9 +418,16 @@ export class StudioApp {
     else if (e.key === "End") this.seekTo(this.perf?.duration ?? 0);
     else if (e.key === "Delete" || e.key === "Backspace") {
       if (this.timeline.deleteSelection()) e.preventDefault();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       void this.saveAll();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      if (e.shiftKey) this.redo();
+      else this.undo();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      e.preventDefault();
+      this.redo();
     }
   }
 
@@ -421,8 +448,41 @@ export class StudioApp {
     });
   }
 
-  private onPerfEdited(): void {
+  /** Instantané des pistes pour annuler (appelé avant une modification). */
+  pushHistory(): void {
     if (!this.perf) return;
+    const snap = JSON.stringify({ expressions: this.perf.expressions, gestures: this.perf.gestures });
+    if (this.history[this.history.length - 1] === snap) return;
+    this.history.push(snap);
+    if (this.history.length > 100) this.history.shift();
+    this.future = [];
+  }
+
+  private restore(snap: string): void {
+    if (!this.perf) return;
+    const data = JSON.parse(snap) as { expressions: ExpressionSegment[]; gestures: GestureEvent[] };
+    this.perf.expressions = data.expressions;
+    this.perf.gestures = data.gestures;
+    this.timeline.select(null);
+    this.onPerfEdited(true);
+    this.renderPanel("pistes");
+  }
+
+  undo(): void {
+    if (!this.perf || !this.history.length) return;
+    this.future.push(JSON.stringify({ expressions: this.perf.expressions, gestures: this.perf.gestures }));
+    this.restore(this.history.pop()!);
+  }
+
+  redo(): void {
+    if (!this.perf || !this.future.length) return;
+    this.history.push(JSON.stringify({ expressions: this.perf.expressions, gestures: this.perf.gestures }));
+    this.restore(this.future.pop()!);
+  }
+
+  private onPerfEdited(fromHistory = false): void {
+    if (!this.perf) return;
+    void fromHistory;
     this.dirtyPerf = true;
     this.perf.expressions.sort((a, b) => a.start - b.start);
     this.perf.gestures.sort((a, b) => a.at - b.at);
@@ -444,6 +504,26 @@ export class StudioApp {
     } catch (e) {
       this.toast(`Enregistrement de performance.json refusé : ${(e as Error).message}`, "err", 8000);
     }
+  }
+
+  /** Joue un geste à la position courante sans l'enregistrer dans les pistes. */
+  private testGesture(clip: string): void {
+    if (!this.perf || !this.payload || !this.cfg) return;
+    const perf = JSON.parse(JSON.stringify(this.perf)) as Performance;
+    perf.gestures.push({ at: round(this.t), clip, source: "test" });
+    const duration = this.cfg.gestures.procedural[clip]?.duration ?? 1.5;
+    void this.player.load({ ...this.payload, performance: perf, config: this.cfg }).then(() => {
+      this.lastFrame = -1;
+      this.play();
+      const stopAt = this.t + duration + 0.4;
+      const check = () => {
+        if (this.t >= stopAt || !this.playing) {
+          this.pause();
+          this.scheduleApply();
+        } else requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
   }
 
   private onConfigEdited(file: keyof AllConfig): void {
@@ -520,7 +600,7 @@ export class StudioApp {
         else if (this.tab === "rendu" && ev.type === "progress") this.renderPanel("rendu");
       });
       this.busy = false;
-      const label = { prepare: "Préparation", render: "Rendu", planche: "Planche" }[type];
+      const label = JOB_LABELS[type];
       if (status === "termine") {
         this.toast(`${label} terminé`, "ok");
         if (type === "prepare") await this.openProject(this.current);
@@ -565,6 +645,10 @@ export class StudioApp {
       case "reglages":
         this.renderReglages(el);
         break;
+      case "poses":
+        if (this.cfg) this.poseEditor.render(el, this.cfg);
+        else el.append(h("div.empty", null, "Chargement de la configuration…"));
+        break;
       case "rendu":
         this.renderRendu(el);
         break;
@@ -590,7 +674,20 @@ export class StudioApp {
       el.append(h("div.empty", null, "Créez un projet avec le bouton « + Projet » pour commencer."));
       return;
     }
-    el.append(h("h3", null, `Projet « ${this.current} »`));
+    el.append(h("div.row", null, h("h3", { style: { margin: "4px 0", flex: 1 } }, `Projet « ${this.current} »`), h("button.small.danger", { title: "Supprimer le projet et tous ses fichiers", onclick: async () => {
+      if (!this.current || !confirm(`Supprimer définitivement le projet « ${this.current} » et ses fichiers ?`)) return;
+      try {
+        await api.deleteProject(this.current);
+        this.current = undefined;
+        this.perf = undefined;
+        await this.loadProjects();
+        if (this.current) await this.openProject(this.current);
+        this.renderAll();
+        this.toast("Projet supprimé", "ok");
+      } catch (e) {
+        this.toast((e as Error).message, "err");
+      }
+    } }, icon("trash", 14), "Supprimer")));
     const dl = h("dl.kv");
     if (s?.meta) dl.append(h("dt", null, "Mode"), h("dd", null, s.meta.mode === "texte" ? "B : texte → voix Azure" : "A : voix enregistrée"));
     if (this.perf) {
@@ -738,14 +835,15 @@ export class StudioApp {
     } else if (sel.kind === "expression") {
       const seg = perf.expressions[sel.index];
       const emo = h("select", null, ...emotions.map((e) => h("option", { value: e, selected: e === seg.emotion }, e)));
-      emo.onchange = () => { seg.emotion = emo.value; seg.source = "manuel"; this.onPerfEdited(); };
+      emo.onchange = () => { this.pushHistory(); seg.emotion = emo.value; seg.source = "manuel"; this.onPerfEdited(); };
       const intensity = h("input", { type: "range", min: 0, max: 1, step: 0.05, value: seg.intensity });
       const intOut = h("output", null, `${Math.round(seg.intensity * 100)} %`);
+      intensity.onmousedown = () => this.pushHistory();
       intensity.oninput = () => { seg.intensity = Number(intensity.value); seg.source = "manuel"; intOut.textContent = `${Math.round(seg.intensity * 100)} %`; this.onPerfEdited(); };
       const start = h("input", { type: "number", step: 0.05, min: 0, max: perf.duration, value: seg.start });
       const end = h("input", { type: "number", step: 0.05, min: 0, max: perf.duration, value: seg.end });
-      start.onchange = () => { seg.start = Math.min(Number(start.value), seg.end - 0.05); seg.source = "manuel"; this.onPerfEdited(); };
-      end.onchange = () => { seg.end = Math.max(Number(end.value), seg.start + 0.05); seg.source = "manuel"; this.onPerfEdited(); };
+      start.onchange = () => { this.pushHistory(); seg.start = Math.min(Number(start.value), seg.end - 0.05); seg.source = "manuel"; this.onPerfEdited(); };
+      end.onchange = () => { this.pushHistory(); seg.end = Math.max(Number(end.value), seg.start + 0.05); seg.source = "manuel"; this.onPerfEdited(); };
       el.append(
         h("div.controls", null,
           h("label.control", null, h("span", null, "Émotion"), emo),
@@ -757,14 +855,14 @@ export class StudioApp {
           h("button", { onclick: () => this.seekTo(seg.start) }, icon("play", 14), "Aller au début"),
           h("button.danger", { onclick: () => this.timeline.deleteSelection() }, icon("trash", 14), "Supprimer"),
         ),
-        h("p.hint", null, `Source : ${seg.source}`),
+        h("p.hint", null, `Source : ${seg.source} · `, h("kbd", null, "Ctrl+Z"), " annuler, ", h("kbd", null, "Ctrl+Y"), " rétablir"),
       );
     } else {
       const g = perf.gestures[sel.index];
       const clip = h("select", null, ...clips.map((c) => h("option", { value: c, selected: c === g.clip }, c)));
-      clip.onchange = () => { g.clip = clip.value; g.source = "manuel"; this.onPerfEdited(); };
+      clip.onchange = () => { this.pushHistory(); g.clip = clip.value; g.source = "manuel"; this.onPerfEdited(); };
       const at = h("input", { type: "number", step: 0.05, min: 0, max: perf.duration, value: g.at });
-      at.onchange = () => { g.at = Number(at.value); g.source = "manuel"; this.onPerfEdited(); };
+      at.onchange = () => { this.pushHistory(); g.at = Number(at.value); g.source = "manuel"; this.onPerfEdited(); };
       el.append(
         h("div.controls", null, h("label.control", null, h("span", null, "Geste"), clip), h("label.control", null, h("span", null, "Instant (s)"), at)),
         h("div.row", null,
@@ -777,6 +875,7 @@ export class StudioApp {
 
     el.append(h("h3", null, `Émotions (${perf.expressions.length})`));
     const addEmotion = h("button.small", { onclick: () => {
+      this.pushHistory();
       const seg: ExpressionSegment = { start: round(this.t), end: round(Math.min(perf.duration, this.t + 2)), emotion: emotions.find((e) => e !== "neutre") ?? "neutre", intensity: 0.8, source: "manuel" };
       perf.expressions.push(seg);
       this.onPerfEdited();
@@ -795,6 +894,7 @@ export class StudioApp {
 
     el.append(h("h3", null, `Gestes (${perf.gestures.length})`));
     const addGesture = h("button.small", { onclick: () => {
+      this.pushHistory();
       const g: GestureEvent = { at: round(this.t), clip: clips[0] ?? "salut", source: "manuel" };
       perf.gestures.push(g);
       this.onPerfEdited();
@@ -833,6 +933,26 @@ export class StudioApp {
       return;
     }
     el.append(h("p.hint", null, "Chaque réglage s'applique immédiatement à l'image. Enregistrez pour l'écrire dans config/ (utilisé par le rendu)."));
+    if (this.mode === "studio") {
+      el.append(h("h3", null, "Modèle 3D"));
+      const modelSel = h("select", null,
+        ...this.models.map((m) => h("option", { value: m, selected: m === cfg.scene.model }, m.replace(/^assets\/models\//, ""))),
+        this.models.includes(cfg.scene.model) ? null : h("option", { value: cfg.scene.model, selected: true }, `${cfg.scene.model} (introuvable)`),
+      );
+      modelSel.onchange = () => {
+        cfg.scene.model = modelSel.value;
+        this.onConfigEdited("scene");
+        void this.saveConfig("scene").then(() => {
+          if (this.current) void this.openProject(this.current);
+        });
+      };
+      el.append(h("div.row", null, modelSel), h("p.hint", null, "Fichiers .glb de assets/models/. Le changement est enregistré et le projet rechargé."));
+    }
+    if (this.perf && this.cfg) {
+      el.append(h("h3", null, "Tester un geste ici"));
+      el.append(h("div.row", null, ...Object.keys(cfg.gestures.procedural).map((clip) => h("button.small", { onclick: () => this.testGesture(clip) }, clip))));
+      el.append(h("p.hint", null, "Joue le geste à la tête de lecture sans l'ajouter aux pistes."));
+    }
     el.append(h("h3", null, "Préréglages de format"));
     el.append(h("div.row", null, ...FORMAT_PRESETS.map((p) => h("button.small", { onclick: () => { p.apply(cfg); this.onConfigEdited("scene"); this.renderPanel("reglages"); } }, p.label))));
     const openState = (id: string) => localStorage.getItem(`avatar-sec-${id}`) !== "0";
@@ -885,6 +1005,15 @@ export class StudioApp {
       el.append(h("div.row", null, h("div.progress", { style: { flex: 1 } }, h("div", { style: { width: `${pct}%` } })), h("span.meta", null, `${running.progress.done}/${running.progress.total}`), h("button.small.danger", { onclick: () => void api.cancelJob(running.id) }, "Annuler")));
     }
 
+    el.append(h("h3", null, "Image fixe"));
+    const transparentImg = h("input", { type: "checkbox" });
+    el.append(
+      h("div.row", null,
+        h("button", { disabled: this.busy, onclick: () => void this.runJob("image", { t: round(this.t), transparent: transparentImg.checked }) }, icon("camera"), `PNG de l'image à ${fmtTime(this.t)}`),
+        h("label", null, transparentImg, " fond transparent"),
+      ),
+      h("p.hint", null, "Capture exacte du rendu final (bulle comprise) à la position de la tête de lecture."),
+    );
     el.append(h("h3", null, "Planche de contrôle"));
     el.append(
       h("div.row", null, h("button", { disabled: this.busy, onclick: () => void this.runJob("planche", { emotions: true }) }, icon("grid"), "Générer la planche (poses et émotions)")),
@@ -911,11 +1040,29 @@ export class StudioApp {
       el.append(h("div.empty", null, "Le journal des jobs n'existe qu'en local."));
       return;
     }
+    el.append(h("h3", null, "Environnement"));
+    if (!this.envItems) {
+      el.append(h("p.hint", null, "vérification…"));
+      void api.check().then((r) => {
+        this.envItems = r.items;
+        this.models = r.models;
+        if (this.tab === "journal") this.renderPanel("journal");
+      }).catch(() => (this.envItems = []));
+    } else {
+      const list = h("div.list");
+      for (const it of this.envItems) {
+        list.appendChild(h("div.item", { style: { cursor: "default" }, title: it.impact ? `Nécessaire pour : ${it.impact}` : "" },
+          h("span", { style: { color: it.ok ? "var(--ok)" : "var(--warn)" } }, icon(it.ok ? "check" : "warn", 14)),
+          h("span.grow", null, it.label),
+          h("span.meta", { title: it.detail }, it.detail.length > 42 ? it.detail.slice(0, 40) + "…" : it.detail)));
+      }
+      el.append(list, h("div.row", null, h("button.small", { onclick: () => { this.envItems = undefined; this.renderPanel("journal"); } }, "Revérifier")));
+    }
     el.append(h("h3", null, "Jobs"));
     if (!this.jobs.length) el.append(h("p.hint", null, "Aucun job lancé pour l'instant. Les préparations, rendus et planches apparaîtront ici avec leur journal."));
     const list = h("div.list");
     for (const j of this.jobs.slice(0, 20)) {
-      const label = { prepare: "Préparation", render: "Rendu", planche: "Planche" }[j.type];
+      const label = JOB_LABELS[j.type];
       const statusCls = j.status === "termine" ? "ok" : j.status === "erreur" ? "err" : j.status === "en_cours" ? "" : "warn";
       list.appendChild(h("div.item", { className: `item${this.activeJobId === j.id ? " selected" : ""}`, onclick: () => { this.activeJobId = j.id; this.renderPanel("journal"); } },
         h("span.grow", null, `${label} · ${j.project}`),

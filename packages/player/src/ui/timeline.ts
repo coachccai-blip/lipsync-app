@@ -27,7 +27,11 @@ export class Timeline {
   private t = 0;
   private pxPerSec = 80;
   private scroll = 0;
-  private drag?: { kind: "seek" | "move"; sel?: Selection; startX: number; origStart: number; origEnd: number; moved: boolean };
+  private drag?: { kind: "seek" | "move" | "resize-start" | "resize-end"; sel?: Selection; startX: number; origStart: number; origEnd: number; moved: boolean };
+  /** Aimantation aux frontières de mots (s) ; 0 = désactivée. */
+  snap = 0.06;
+  /** Appelé juste avant une modification (pour l'historique d'annulation). */
+  beforeChange?: () => void;
   private ro: ResizeObserver;
 
   constructor(private readonly container: HTMLElement, private readonly cb: TimelineCallbacks) {
@@ -41,6 +45,11 @@ export class Timeline {
     window.addEventListener("mousemove", (e) => this.onMove(e));
     window.addEventListener("mouseup", (e) => this.onUp(e));
     this.canvas.addEventListener("dblclick", (e) => this.onDblClick(e));
+    this.canvas.addEventListener("mousemove", (e) => {
+      if (this.drag) return;
+      const { x, y } = this.local(e);
+      this.canvas.style.cursor = this.cursorAt(x, y);
+    });
     this.canvas.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
     this.resize();
   }
@@ -139,7 +148,13 @@ export class Timeline {
       const item = sel.kind === "expression" ? this.perf.expressions[sel.index] : this.perf.gestures[sel.index];
       const start = "start" in item ? item.start : item.at;
       const end = "end" in item ? item.end : item.at;
-      this.drag = { kind: "move", sel, startX: x, origStart: start, origEnd: end, moved: false };
+      let kind: "move" | "resize-start" | "resize-end" = "move";
+      if (sel.kind === "expression") {
+        if (Math.abs(x - this.x(start)) < 6) kind = "resize-start";
+        else if (Math.abs(x - this.x(end)) < 6) kind = "resize-end";
+      }
+      this.drag = { kind, sel, startX: x, origStart: start, origEnd: end, moved: false };
+      this.beforeChange?.();
       this.selection = sel;
       this.cb.onSelect(sel);
       this.draw();
@@ -173,14 +188,19 @@ export class Timeline {
     if (Math.abs(x - this.drag.startX) > 3) this.drag.moved = true;
     const sel = this.drag.sel!;
     const D = this.perf.duration;
+    const snap = e.altKey ? (t: number) => t : (t: number) => this.snapTo(t);
     if (sel.kind === "expression") {
       const seg = this.perf.expressions[sel.index];
-      const len = this.drag.origEnd - this.drag.origStart;
-      seg.start = round(Math.max(0, Math.min(D - len, this.drag.origStart + dt)));
-      seg.end = round(seg.start + len);
+      if (this.drag.kind === "resize-start") seg.start = round(Math.max(0, Math.min(seg.end - 0.1, snap(this.drag.origStart + dt))));
+      else if (this.drag.kind === "resize-end") seg.end = round(Math.min(D, Math.max(seg.start + 0.1, snap(this.drag.origEnd + dt))));
+      else {
+        const len = this.drag.origEnd - this.drag.origStart;
+        seg.start = round(Math.max(0, Math.min(D - len, snap(this.drag.origStart + dt))));
+        seg.end = round(seg.start + len);
+      }
     } else {
       const g = this.perf.gestures[sel.index];
-      g.at = round(Math.max(0, Math.min(D, this.drag.origStart + dt)));
+      g.at = round(Math.max(0, Math.min(D, snap(this.drag.origStart + dt))));
     }
     this.draw();
   }
@@ -189,7 +209,36 @@ export class Timeline {
     if (!this.drag) return;
     const d = this.drag;
     this.drag = undefined;
-    if (d.kind === "move" && d.moved) this.cb.onChange();
+    if (d.kind !== "seek" && d.moved) this.cb.onChange();
+  }
+
+  /** Aimante un temps à la frontière de mot la plus proche (dans la tolérance `snap`). */
+  private snapTo(t: number): number {
+    if (!this.perf || this.snap <= 0) return t;
+    let best = t;
+    let bestD = this.snap;
+    for (const w of this.perf.words) {
+      for (const b of [w.start, w.end]) {
+        const d = Math.abs(b - t);
+        if (d < bestD) {
+          bestD = d;
+          best = b;
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Curseur selon la zone survolée (poignées de redimensionnement). */
+  cursorAt(px: number, py: number): string {
+    if (!this.perf) return "crosshair";
+    const sel = this.hit(px, py);
+    if (!sel) return "crosshair";
+    if (sel.kind === "expression") {
+      const e = this.perf.expressions[sel.index];
+      if (Math.abs(px - this.x(e.start)) < 6 || Math.abs(px - this.x(e.end)) < 6) return "ew-resize";
+    }
+    return "grab";
   }
 
   private onDblClick(e: MouseEvent): void {
@@ -198,6 +247,7 @@ export class Timeline {
     if (this.hit(x, y)) return;
     const row = this.rowOf(y);
     const t = round(this.tAt(x));
+    if (row === 2 || row === 3) this.beforeChange?.();
     if (row === 2) {
       const emotions = Object.keys(this.cfg.emotions.emotions).filter((n) => n !== "neutre");
       const seg: ExpressionSegment = { start: t, end: round(Math.min(this.perf.duration, t + 2)), emotion: emotions[0] ?? "neutre", intensity: 0.8, source: "manuel" };
@@ -229,6 +279,7 @@ export class Timeline {
   /** Supprime l'élément sélectionné. */
   deleteSelection(): boolean {
     if (!this.perf || !this.selection) return false;
+    this.beforeChange?.();
     if (this.selection.kind === "expression") this.perf.expressions.splice(this.selection.index, 1);
     else this.perf.gestures.splice(this.selection.index, 1);
     this.selection = null;

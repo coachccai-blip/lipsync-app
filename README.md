@@ -68,9 +68,11 @@ Sans modèle, un **personnage de substitution** procédural (tête, yeux, sourci
 - **Projet** : créer un projet, déposer un enregistrement de voix ou un script texte, lancer la préparation (journal en direct), corriger la transcription, lire le rapport de chargement du modèle.
 - **Scène et transport** : lecture avec l'audio, image par image (← →), boucle, zoom de la timeline.
 - **Pistes** : timeline éditable (mots, visèmes, émotions, gestes, énergie, accents) : clic pour sélectionner, glisser pour déplacer, double-clic pour ajouter, Suppr pour supprimer, formulaire d'édition ; `performance.json` est enregistré automatiquement et validé.
-- **Réglages** : format et position de la bulle (préréglages carré, paysage bulle à droite ou à gauche, portrait), cadrage, lumière, bouche, expressions, vie procédurale, gestes ; chaque curseur s'applique immédiatement, « Enregistrer » écrit dans `config/`.
-- **Rendu** : mp4 fond vert, ProRes 4444 ou WebM alpha, extrait `--debut/--fin`, **brouillon** (demi-résolution, quatre fois plus rapide), **sous-titres SRT**, planche de contrôle, liste des fichiers produits avec aperçu.
-- **Journal** : file des jobs (préparation, rendu, planche), progression, annulation, journal complet.
+- **Réglages** : choix du modèle parmi `assets/models/`, test d'un geste à la volée, format et position de la bulle (préréglages carré, paysage bulle à droite ou à gauche, portrait), cadrage, lumière, bouche, expressions, vie procédurale, gestes ; chaque curseur s'applique immédiatement, « Enregistrer » écrit dans `config/`.
+- **Poses** : éditeur de blendshapes pour chaque émotion (`emotions.json`) et chaque forme de bouche Rhubarb (`visemes.json`), avec aperçu figé sur le modèle ; création d'émotions.
+- **Rendu** : mp4 fond vert, ProRes 4444 ou WebM alpha, extrait `--debut/--fin`, **brouillon** (demi-résolution, quatre fois plus rapide), **sous-titres SRT**, image PNG fixe de la position courante (bulle comprise, fond transparent possible), planche de contrôle, liste des fichiers produits avec aperçu.
+- **Journal** : bilan de l'environnement (outils, clés, modèle), file des jobs (préparation, rendu, planche, image), progression, annulation, journal complet.
+- Timeline : poignées de redimensionnement des émotions, aimantation aux frontières de mots (Alt pour désactiver), annuler / rétablir (`Ctrl+Z`, `Ctrl+Y`), `Ctrl+S` pour tout enregistrer.
 
 Les fichiers restent la source de vérité : modifier `performance.json` ou `config/*.json` à la main recharge le studio à chaud, et la CLI reste utilisable en parallèle.
 

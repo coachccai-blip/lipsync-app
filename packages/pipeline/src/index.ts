@@ -16,3 +16,4 @@ export * from "./project.js";
 export * from "./prepare.js";
 export * from "./srt.js";
 export * from "./projects.js";
+export * from "./check.js";

@@ -3,8 +3,11 @@ import http from "node:http";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
+import { findChrome } from "./chrome.js";
 import {
   CONFIG_FILES,
+  checkEnvironment,
   PROJECT_FILES,
   configVocab,
   listProjects,
@@ -65,7 +68,7 @@ export interface RunningServer {
   payload(): unknown;
 }
 
-export type JobType = "prepare" | "render" | "planche";
+export type JobType = "prepare" | "render" | "planche" | "image";
 export type JobStatus = "en_attente" | "en_cours" | "termine" | "erreur" | "annule";
 
 export interface JobEvent {
@@ -248,6 +251,19 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
           },
         });
         setStatus(job, "termine", { result: { output: outName, url: `/files/${encodeURIComponent(job.project)}/${outName}`, frames: r.frames, duration: r.duration, srt: o.srt ? outName.replace(/\.[^.]+$/, ".srt") : undefined } });
+      } else if (job.type === "image") {
+        const { renderProject } = await import("./render.js");
+        const t = typeof o.t === "number" ? o.t : 0;
+        const fps = loadPerformance(dir).fps;
+        const framesDir = path.join(dir, "cache", "image");
+        rmSync(framesDir, { recursive: true, force: true });
+        const frame = Math.round(t * fps);
+        await renderProject({ projectDir: dir, format: Boolean(o.transparent) ? "webm-alpha" : "mp4", debut: frame / fps, fin: (frame + 1) / fps, skipEncode: true, framesDir, root, quiet: true, signal: controller.signal });
+        const produced = readdirSync(framesDir).find((f) => f.endsWith(".png"));
+        if (!produced) throw new Error("aucune image produite");
+        const name = `image-${t.toFixed(2).replace(".", "_")}s.png`;
+        writeFileSync(path.join(dir, name), readFileSync(path.join(framesDir, produced)));
+        setStatus(job, "termine", { result: { output: name, url: `/files/${encodeURIComponent(job.project)}/${name}?ts=${Date.now()}` } });
       } else if (job.type === "planche") {
         const { renderPoseSheet } = await import("./sheet.js");
         const out = path.join(dir, "planche.png");
@@ -291,6 +307,16 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       const dir = path.join(projectsDir, name);
       mkdirSync(path.join(dir, "source"), { recursive: true });
       return json(res, summarizeProject(dir), 201);
+    }
+    const deleteMatch = /^\/api\/projects\/([^/]+)$/.exec(p);
+    if (deleteMatch && req.method === "DELETE") {
+      const dir = projectDir(deleteMatch[1]);
+      if (!dir.startsWith(projectsDir + path.sep)) throw new HttpError(400, "ce projet n'est pas dans le dossier des projets");
+      rmSync(dir, { recursive: true, force: true });
+      return json(res, { ok: true });
+    }
+    if (p === "/api/check") {
+      return json(res, checkEnvironment({ root, findChrome }));
     }
     if (p === "/api/project") {
       const dir = projectDir(project);
@@ -357,7 +383,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     }
     if (p === "/api/jobs" && req.method === "POST") {
       const body = JSON.parse((await readBody(req)).toString() || "{}") as { type?: JobType; project?: string; options?: Record<string, unknown> };
-      if (!body.type || !["prepare", "render", "planche"].includes(body.type)) throw new HttpError(400, "type de job invalide");
+      if (!body.type || !["prepare", "render", "planche", "image"].includes(body.type)) throw new HttpError(400, "type de job invalide");
       const name = body.project ?? (defaultProject ? path.basename(defaultProject) : undefined);
       if (!name) throw new HttpError(400, "projet manquant");
       projectDir(name);

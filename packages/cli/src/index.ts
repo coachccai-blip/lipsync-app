@@ -4,7 +4,7 @@ import { config as loadEnv } from "dotenv";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { PerformanceValidationError, makeTestPerformance } from "@avatar/shared";
-import { ToolNotFoundError, configVocab, loadConfig, loadPerformance, log, prepare, repoRoot, resolveTool, run, writePerformance } from "@avatar/pipeline";
+import { ToolNotFoundError, checkEnvironment, configVocab, loadConfig, loadPerformance, log, prepare, repoRoot, resolveTool, run, writePerformance } from "@avatar/pipeline";
 import { FORMAT_EXT, renderPoseSheet, renderProject, startServer, type OutputFormat } from "@avatar/renderer";
 
 loadEnv({ path: path.join(repoRoot(), ".env") });
@@ -129,30 +129,12 @@ program
 
 program
   .command("check")
-  .description("Vérifie les outils externes et les variables d'environnement")
+  .description("Vérifie les outils externes, les variables d'environnement, le modèle et le player")
   .action(async () => {
-    const tools = ["ffmpeg", "ffprobe", "rhubarb", "whisper"] as const;
-    for (const t of tools) {
-      try {
-        log.done(`${t} : ${resolveTool(t)}`);
-      } catch (e) {
-        log.warn(`${t} : ${(e as Error).message}`);
-      }
-    }
     const { findChrome } = await import("@avatar/renderer");
-    const chrome = findChrome();
-    if (chrome) log.done(`chrome : ${chrome}`);
-    else log.warn("chrome : introuvable (CHROME_PATH ou npm run setup)");
-    for (const v of ["AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "WHISPER_MODEL"]) {
-      log.info(`${v} : ${process.env[v] ? (v.includes("KEY") ? "défini" : process.env[v]) : "non défini"}`);
-    }
-    const cfg = loadConfig();
-    const model = path.resolve(repoRoot(), cfg.scene.model);
-    if (existsSync(model)) log.done(`modèle : ${model}`);
-    else log.warn(`modèle : ${model} introuvable (config/scene.json → model) ; le rendu utilisera le personnage de substitution`);
-    const dist = path.join(repoRoot(), "packages", "player", "dist", "index.html");
-    if (existsSync(dist)) log.done("player construit");
-    else log.warn("player non construit : npm run build");
+    const report = checkEnvironment({ findChrome });
+    for (const it of report.items) (it.ok ? log.done : log.warn)(`${it.label} : ${it.detail}${it.ok ? "" : ` → ${it.impact}`}`);
+    if (report.models.length) log.info(`modèles disponibles : ${report.models.join(", ")}`);
   });
 
 async function openBrowser(url: string): Promise<void> {

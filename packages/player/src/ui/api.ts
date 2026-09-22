@@ -14,9 +14,17 @@ export interface ProjectSummary {
   meta?: { mode: "audio" | "texte"; input: string };
 }
 
+export interface CheckItem {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+  impact?: string;
+}
+
 export interface JobSummary {
   id: string;
-  type: "prepare" | "render" | "planche";
+  type: "prepare" | "render" | "planche" | "image";
   project: string;
   status: "en_attente" | "en_cours" | "termine" | "erreur" | "annule";
   createdAt: string;
@@ -56,6 +64,8 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   projects: () => req<{ projects: ProjectSummary[]; current?: string; projectsDir: string }>("/api/projects"),
   createProject: (name: string) => req<ProjectSummary>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),
+  deleteProject: (name: string) => req<{ ok: true }>(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  check: () => req<{ items: CheckItem[]; models: string[] }>("/api/check"),
   project: (name: string) => req<StudioPayload>(`/api/project?project=${encodeURIComponent(name)}`),
   upload: (project: string, file: File) =>
     req<{ name: string; size: number; kind: "audio" | "texte" }>(`/api/upload?project=${encodeURIComponent(project)}&name=${encodeURIComponent(file.name)}`, { method: "POST", body: file }),

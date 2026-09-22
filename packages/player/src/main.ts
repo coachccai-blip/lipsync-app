@@ -20,6 +20,8 @@ class Player {
   private currentModelCfg = "";
   private currentClipsKey = "";
   private lastT = 0;
+  /** Poids de blendshapes forcés (éditeur de poses) : remplace bouche, expressions et vie. */
+  overrideMorphs?: Record<string, number>;
 
   async load(payload: ProjectPayload): Promise<LoadReport> {
     const cfg = payload.config;
@@ -95,6 +97,7 @@ class Player {
     if (!this.stage || !this.model || !this.animator) throw new Error("Aucun projet chargé : appelez loadProject() d'abord.");
     this.lastT = t;
     const frame = this.animator.frameAt(t);
+    if (this.overrideMorphs) frame.morphs = { ...this.overrideMorphs };
     applyFrame(this.model, frame, this.clips && this.report?.gestureSource === "clips" ? () => this.clips!.update(t) : undefined);
     this.stage.render();
   }
@@ -109,6 +112,9 @@ window.loadProject = (data) => player.load(data);
 window.renderFrame = (t) => player.renderFrame(t);
 window.getDuration = () => player.getDuration();
 window.getReport = () => player.report;
+window.setOverrideMorphs = (m) => {
+  player.overrideMorphs = m ?? undefined;
+};
 
 const params = new URLSearchParams(location.search);
 const rawMode = params.get("mode") ?? "demo";

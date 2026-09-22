@@ -41,6 +41,7 @@ declare global {
     renderFrame: (t: number) => Promise<void>;
     getDuration: () => number;
     getReport: () => LoadReport | undefined;
+    setOverrideMorphs: (m: Record<string, number> | null) => void;
     avatarReady: Promise<void>;
     __avatarError?: string;
   }
