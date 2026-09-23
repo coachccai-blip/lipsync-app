@@ -5,6 +5,8 @@ import { api, type CheckItem, type JobEvent, type JobSummary, type ProjectSummar
 import { FORMAT_PRESETS, SECTIONS, buildControls } from "./controls.js";
 import { clear, download, fmtBytes, fmtTime, h, icon } from "./dom.js";
 import { EMOTION_COLORS, Timeline } from "./timeline.js";
+import { analyzeAudio, type AudioAnalysis } from "./audio.js";
+import { autoTracks } from "@avatar/shared";
 import { PoseEditor } from "./poses.js";
 
 export interface PlayerLike {
@@ -63,6 +65,8 @@ export class StudioApp {
   });
   private envItems?: CheckItem[];
   private models: string[] = [];
+  private audioAnalysis?: AudioAnalysis;
+  private audioAnalysisUrl?: string;
   private els!: {
     projectSelect: HTMLSelectElement;
     chips: HTMLElement;
@@ -155,16 +159,43 @@ export class StudioApp {
       seek,
       h("label", { title: "Lecture en boucle" }, loop, " boucle"),
     );
+    const viewBtn = h("button.small", { title: "Forme d'onde ou spectrogramme", onclick: () => {
+      this.timeline.audioView = this.timeline.audioView === "wave" ? "spectro" : "wave";
+      viewBtn.textContent = this.timeline.audioView === "wave" ? "Onde" : "Spectre";
+      localStorage.setItem("avatar-audio-view", this.timeline.audioView);
+      this.timeline.draw();
+    } }, "Onde");
     const tlTools = h(
       "div.timeline-tools",
       null,
-      h("span", null, "Timeline : clic = aller à, glisser = déplacer, double-clic = ajouter, ", h("kbd", null, "Suppr"), " = supprimer, ", h("kbd", null, "Ctrl"), " + molette = zoom"),
+      viewBtn,
+      h("span", null, "clic = aller à · glisser = déplacer · bords = redimensionner · double-clic = ajouter · ", h("kbd", null, "Suppr"), " · ", h("kbd", null, "Ctrl"), " + molette = zoom · ", h("kbd", null, "Ctrl+Z")),
       h("div.spacer"),
       h("button.icon.small", { title: "Zoom avant", onclick: () => this.timeline.zoom(1.5) }, icon("zoomIn", 16)),
       h("button.icon.small", { title: "Zoom arrière", onclick: () => this.timeline.zoom(1 / 1.5) }, icon("zoomOut", 16)),
       h("button.small", { title: "Tout afficher", onclick: () => this.timeline.fit() }, "Ajuster"),
     );
-    const tlWrap = h("div.timeline-wrap", null, tlTools, h("div.timeline-container#timeline-container"));
+    const handle = h("div.resize-handle", { title: "Glisser pour changer la hauteur de la timeline" });
+    const tlWrap = h("div.timeline-wrap", null, handle, tlTools, h("div.timeline-container#timeline-container"));
+    const savedH = Number(localStorage.getItem("avatar-timeline-h"));
+    if (savedH >= 160) tlWrap.style.height = `${savedH}px`;
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = tlWrap.getBoundingClientRect().height;
+      const onMove = (ev: MouseEvent) => {
+        const hh = Math.max(160, Math.min(window.innerHeight * 0.7, startH - (ev.clientY - startY)));
+        tlWrap.style.height = `${hh}px`;
+        this.fit();
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        localStorage.setItem("avatar-timeline-h", String(Math.round(tlWrap.getBoundingClientRect().height)));
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
     const tabs = {} as Record<Tab, HTMLButtonElement>;
     const panels = {} as Record<Tab, HTMLElement>;
     const nav = h("nav.tabs");
@@ -182,6 +213,8 @@ export class StudioApp {
     this.showTab(this.tab);
     const saved = localStorage.getItem("avatar-theme");
     if (saved) document.documentElement.dataset.theme = saved;
+    const savedView = localStorage.getItem("avatar-audio-view");
+    if (savedView === "spectro") viewBtn.click();
   }
 
   private toggleTheme(): void {
@@ -289,6 +322,21 @@ export class StudioApp {
       this.audio = new Audio(url);
       this.audio.preload = "auto";
     }
+    this.loadAudioAnalysis(url);
+  }
+
+  private loadAudioAnalysis(url?: string): void {
+    this.audioAnalysis = undefined;
+    this.timeline.setAudio(undefined);
+    if (!url) return;
+    this.audioAnalysisUrl = url;
+    analyzeAudio(url)
+      .then((a) => {
+        if (this.audioAnalysisUrl !== url) return;
+        this.audioAnalysis = a;
+        this.timeline.setAudio(a);
+      })
+      .catch((e) => this.toast(`Analyse audio impossible : ${(e as Error).message}`, "warn"));
   }
 
   private listenChanges(): void {
@@ -524,6 +572,35 @@ export class StudioApp {
       };
       requestAnimationFrame(check);
     });
+  }
+
+  /** Remplace les pistes automatiques par une génération procédurale couvrant toute la durée. */
+  private generateTracks(): void {
+    if (!this.perf || !this.cfg) return;
+    this.pushHistory();
+    const vocab = { emotions: Object.keys(this.cfg.emotions.emotions), gestures: Object.keys(this.cfg.gestures.procedural) };
+    const keptE = this.perf.expressions.filter((e) => e.source === "balise" || e.source === "manuel");
+    const keptG = this.perf.gestures.filter((g) => g.source === "balise" || g.source === "manuel");
+    const auto = autoTracks({ ...this.perf, expressions: [], gestures: [] }, vocab);
+    // les segments conservés découpent les segments automatiques
+    let expressions = auto.expressions;
+    for (const k of keptE) {
+      const next: ExpressionSegment[] = [];
+      for (const b of expressions) {
+        if (b.end <= k.start || b.start >= k.end) next.push(b);
+        else {
+          if (k.start - b.start >= 0.4) next.push({ ...b, end: k.start });
+          if (b.end - k.end >= 0.4) next.push({ ...b, start: k.end });
+        }
+      }
+      expressions = next;
+    }
+    this.perf.expressions = [...expressions, ...keptE];
+    this.perf.gestures = [...auto.gestures.filter((g) => !keptG.some((k) => Math.abs(k.at - g.at) < 2)), ...keptG];
+    this.timeline.select(null);
+    this.onPerfEdited();
+    this.renderPanel("pistes");
+    this.toast(`${auto.expressions.length} segment(s) d'émotion et ${auto.gestures.length} geste(s) générés`, "ok");
   }
 
   private onConfigEdited(file: keyof AllConfig): void {
@@ -885,6 +962,11 @@ export class StudioApp {
       );
     }
 
+    el.append(h("h3", null, "Génération automatique"));
+    el.append(
+      h("div.row", null, h("button.primary", { onclick: () => this.generateTracks() }, icon("grid", 14), "Générer émotions et gestes sur toute la durée")),
+      h("p.hint", null, "À partir de l'audio (phrases, énergie, accents, ponctuation), sans LLM. Les segments issus des balises et vos modifications manuelles sont conservés ; les segments automatiques et LLM sont remplacés."),
+    );
     el.append(h("h3", null, `Émotions (${perf.expressions.length})`));
     const addEmotion = h("button.small", { onclick: () => {
       this.pushHistory();

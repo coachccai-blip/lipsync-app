@@ -10,3 +10,4 @@ export * from "./anim/gestures.js";
 export * from "./anim/compose.js";
 export * from "./demo.js";
 export * from "./defaults.js";
+export * from "./anim/auto.js";

@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { AllConfig, ExpressionSegment, GestureEvent, Performance, VisemeCue, Word } from "@avatar/shared";
+import { autoTracks, type AllConfig, type ExpressionSegment, type GestureEvent, type Performance, type VisemeCue, type Word } from "@avatar/shared";
 import { audioDuration, normalizeAudio, pcmToWav, readWav } from "./audio.js";
 import { cachedStep, hashInputs } from "./cache.js";
 import { configVocab, loadConfig } from "./config.js";
@@ -60,7 +60,8 @@ export function overrideSegments(base: ExpressionSegment[], priority: Expression
     }
     out = next;
   }
-  return [...out, ...priority].filter((s) => s.end - s.start > 0.05).sort((a, b) => a.start - b.start);
+  // les résidus trop courts de segments découpés sont retirés
+  return [...out.filter((s) => s.end - s.start >= 0.4), ...priority].filter((s) => s.end - s.start > 0.05).sort((a, b) => a.start - b.start);
 }
 
 /** Les gestes de balises sont prioritaires : un geste LLM trop proche est écarté. */
@@ -233,6 +234,12 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
       llmTracks = annotationToTracks(annotation, sentences, vocab, { warn });
       log.info(`${llmTracks.expressions.length} segment(s) d'émotion, ${llmTracks.gestures.length} geste(s)`);
     }
+  }
+  if (llmTracks.expressions.length === 0 && llmTracks.gestures.length === 0) {
+    log.step("Émotions et gestes procéduraux (énergie, accents, phrases) sur toute la durée");
+    const draft: Performance = { version: 1, fps, duration, audio: PROJECT_FILES.audio, text, words, visemes, energy: energy.energy, accents: energy.accents, expressions: [], gestures: [], seed };
+    llmTracks = autoTracks(draft, vocab);
+    log.info(`${llmTracks.expressions.length} segment(s) d'émotion, ${llmTracks.gestures.length} geste(s)`);
   }
   const expressions = overrideSegments(llmTracks.expressions, tagTracks.expressions);
   const gestures = mergeGestures(llmTracks.gestures, tagTracks.gestures);

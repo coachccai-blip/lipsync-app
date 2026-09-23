@@ -114,20 +114,4 @@ export function alignScriptToAsr(scriptWords: string[], asrWords: Word[], durati
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
 
-/** Découpe une liste de mots horodatés en phrases (ponctuation forte). */
-export function splitSentences(words: Word[]): { text: string; start: number; end: number; words: Word[] }[] {
-  const sentences: { text: string; start: number; end: number; words: Word[] }[] = [];
-  let current: Word[] = [];
-  for (const w of words) {
-    current.push(w);
-    if (/[.!?…]["»)]?$/.test(w.w)) {
-      sentences.push(build(current));
-      current = [];
-    }
-  }
-  if (current.length) sentences.push(build(current));
-  return sentences;
-  function build(ws: Word[]) {
-    return { text: ws.map((x) => x.w).join(" "), start: ws[0].start, end: ws[ws.length - 1].end, words: ws };
-  }
-}
+export { splitSentences } from "@avatar/shared";

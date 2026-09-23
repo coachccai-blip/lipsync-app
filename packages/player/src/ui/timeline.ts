@@ -1,4 +1,5 @@
 import type { AllConfig, ExpressionSegment, GestureEvent, Performance } from "@avatar/shared";
+import { drawSpectrogram, drawWave, type AudioAnalysis } from "./audio.js";
 
 export type Selection = { kind: "expression" | "gesture"; index: number };
 
@@ -12,26 +13,44 @@ export interface TimelineCallbacks {
 const SHAPE_COLORS: Record<string, string> = { X: "#3a4048", A: "#c0392b", B: "#e67e22", C: "#f1c40f", D: "#2ecc71", E: "#1abc9c", F: "#3498db", G: "#9b59b6", H: "#e84393" };
 export const EMOTION_COLORS = ["#4f8fe6", "#e67e22", "#2ecc71", "#9b59b6", "#e84393", "#1abc9c", "#f1c40f", "#c0392b", "#7f8c8d"];
 
-const ROWS = ["mots", "visèmes", "émotions", "gestes", "énergie"] as const;
+type RowId = "audio" | "words" | "visemes" | "expressions" | "gestures" | "energy";
+interface Row {
+  id: RowId;
+  label: string;
+  /** Poids de hauteur (l'audio prend plus de place). */
+  weight: number;
+}
+const ROWS: Row[] = [
+  { id: "audio", label: "audio", weight: 2.6 },
+  { id: "words", label: "mots", weight: 1 },
+  { id: "visemes", label: "visèmes", weight: 1 },
+  { id: "expressions", label: "émotions", weight: 1.15 },
+  { id: "gestures", label: "gestes", weight: 1.15 },
+  { id: "energy", label: "énergie", weight: 0.9 },
+];
 const RULER = 22;
+const HEAD = 76;
 
 /**
- * Timeline éditable : mots (clic = aller à), visèmes, émotions et gestes (clic = sélection,
- * glisser = déplacer, double-clic = ajouter), énergie et accents, tête de lecture, zoom.
+ * Timeline d'éditeur : piste audio (onde ou spectrogramme), mots (clic = aller à), visèmes,
+ * émotions et gestes (clic = sélection, glisser = déplacer, bords = redimensionner,
+ * double-clic = ajouter), énergie et accents, tête de lecture, zoom et défilement.
  */
 export class Timeline {
   readonly canvas: HTMLCanvasElement;
   selection: Selection | null = null;
+  /** Aimantation aux frontières de mots (s) ; 0 = désactivée. */
+  snap = 0.06;
+  /** Appelé juste avant une modification (pour l'historique d'annulation). */
+  beforeChange?: () => void;
+  audioView: "wave" | "spectro" = "wave";
+  private audio?: AudioAnalysis;
   private perf?: Performance;
   private cfg?: AllConfig;
   private t = 0;
   private pxPerSec = 80;
   private scroll = 0;
   private drag?: { kind: "seek" | "move" | "resize-start" | "resize-end"; sel?: Selection; startX: number; origStart: number; origEnd: number; moved: boolean };
-  /** Aimantation aux frontières de mots (s) ; 0 = désactivée. */
-  snap = 0.06;
-  /** Appelé juste avant une modification (pour l'historique d'annulation). */
-  beforeChange?: () => void;
   private ro: ResizeObserver;
 
   constructor(private readonly container: HTMLElement, private readonly cb: TimelineCallbacks) {
@@ -45,20 +64,20 @@ export class Timeline {
     window.addEventListener("mousemove", (e) => this.onMove(e));
     window.addEventListener("mouseup", (e) => this.onUp(e));
     this.canvas.addEventListener("dblclick", (e) => this.onDblClick(e));
+    this.canvas.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
     this.canvas.addEventListener("mousemove", (e) => {
       if (this.drag) return;
       const { x, y } = this.local(e);
       this.canvas.style.cursor = this.cursorAt(x, y);
     });
-    this.canvas.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
     this.resize();
   }
 
-  setData(perf: Performance, cfg: AllConfig): void {
+  setData(perf: Performance | undefined, cfg: AllConfig | undefined): void {
     const first = !this.perf;
     this.perf = perf;
     this.cfg = cfg;
-    if (this.selection) {
+    if (this.selection && perf) {
       const list = this.selection.kind === "expression" ? perf.expressions : perf.gestures;
       if (this.selection.index >= list.length) this.selection = null;
     }
@@ -66,12 +85,16 @@ export class Timeline {
     else this.draw();
   }
 
+  setAudio(a: AudioAnalysis | undefined): void {
+    this.audio = a;
+    this.draw();
+  }
+
   setTime(t: number): void {
     this.t = t;
-    // suivre la tête de lecture
     const x = this.x(t);
     const W = this.canvas.clientWidth;
-    if (x > W - 20 || x < 0) this.scroll = Math.max(0, t - (W * 0.2) / this.pxPerSec);
+    if (x > W - 20 || x < HEAD) this.scroll = Math.max(0, t - ((W - HEAD) * 0.2) / this.pxPerSec);
     this.draw();
   }
 
@@ -82,14 +105,14 @@ export class Timeline {
 
   fit(): void {
     const D = Math.max(0.001, this.perf?.duration ?? 1);
-    this.pxPerSec = Math.max(4, (this.canvas.clientWidth - 8) / D);
+    this.pxPerSec = Math.max(4, (this.canvas.clientWidth - HEAD - 8) / D);
     this.scroll = 0;
     this.draw();
   }
 
   zoom(factor: number, aroundT = this.t): void {
-    const before = this.x(aroundT);
-    this.pxPerSec = Math.min(2000, Math.max(4, this.pxPerSec * factor));
+    const before = this.x(aroundT) - HEAD;
+    this.pxPerSec = Math.min(4000, Math.max(4, this.pxPerSec * factor));
     this.scroll = Math.max(0, aroundT - before / this.pxPerSec);
     this.draw();
   }
@@ -102,30 +125,42 @@ export class Timeline {
   }
 
   private x(t: number): number {
-    return (t - this.scroll) * this.pxPerSec;
+    return HEAD + (t - this.scroll) * this.pxPerSec;
   }
   private tAt(px: number): number {
-    return Math.max(0, Math.min(this.perf?.duration ?? 0, px / this.pxPerSec + this.scroll));
+    return Math.max(0, Math.min(this.perf?.duration ?? 0, (px - HEAD) / this.pxPerSec + this.scroll));
   }
-  private rowOf(y: number): number {
-    const h = (this.canvas.clientHeight - RULER) / ROWS.length;
-    return Math.floor((y - RULER) / h);
+
+  /** Géométrie des lignes (y, hauteur) pour la hauteur courante du canvas. */
+  private rows(): (Row & { y: number; h: number })[] {
+    const H = this.canvas.clientHeight - RULER;
+    const total = ROWS.reduce((s, r) => s + r.weight, 0);
+    let y = RULER;
+    return ROWS.map((r) => {
+      const h = (H * r.weight) / total;
+      const out = { ...r, y, h };
+      y += h;
+      return out;
+    });
+  }
+  private rowAt(y: number): RowId | undefined {
+    return this.rows().find((r) => y >= r.y && y < r.y + r.h)?.id;
   }
   private gestureDuration(g: GestureEvent): number {
     return this.cfg?.gestures.procedural[g.clip]?.duration ?? 1.5;
   }
 
   private hit(px: number, py: number): Selection | null {
-    if (!this.perf) return null;
-    const row = this.rowOf(py);
+    if (!this.perf || px < HEAD) return null;
+    const row = this.rowAt(py);
     const t = this.tAt(px);
-    if (row === 2) {
+    if (row === "expressions") {
       for (let i = this.perf.expressions.length - 1; i >= 0; i--) {
         const e = this.perf.expressions[i];
         if (t >= e.start && t <= e.end) return { kind: "expression", index: i };
       }
     }
-    if (row === 3) {
+    if (row === "gestures") {
       for (let i = this.perf.gestures.length - 1; i >= 0; i--) {
         const g = this.perf.gestures[i];
         if (t >= g.at && t <= g.at + this.gestureDuration(g)) return { kind: "gesture", index: i };
@@ -142,6 +177,7 @@ export class Timeline {
   private onDown(e: MouseEvent): void {
     if (!this.perf) return;
     const { x, y } = this.local(e);
+    if (x < HEAD) return;
     this.canvas.focus();
     const sel = this.hit(x, y);
     if (sel) {
@@ -160,8 +196,8 @@ export class Timeline {
       this.draw();
       return;
     }
-    const row = this.rowOf(y);
-    if (row === 0) {
+    const row = this.rowAt(y);
+    if (row === "words") {
       const t = this.tAt(x);
       const w = this.perf.words.find((w) => t >= w.start && t <= w.end);
       if (w) {
@@ -171,7 +207,7 @@ export class Timeline {
     }
     this.drag = { kind: "seek", startX: x, origStart: 0, origEnd: 0, moved: false };
     this.cb.onSeek(this.tAt(x));
-    if (this.selection && row !== 2 && row !== 3) {
+    if (this.selection && row !== "expressions" && row !== "gestures") {
       this.selection = null;
       this.cb.onSelect(null);
     }
@@ -212,7 +248,6 @@ export class Timeline {
     if (d.kind !== "seek" && d.moved) this.cb.onChange();
   }
 
-  /** Aimante un temps à la frontière de mot la plus proche (dans la tolérance `snap`). */
   private snapTo(t: number): number {
     if (!this.perf || this.snap <= 0) return t;
     let best = t;
@@ -229,9 +264,8 @@ export class Timeline {
     return best;
   }
 
-  /** Curseur selon la zone survolée (poignées de redimensionnement). */
   cursorAt(px: number, py: number): string {
-    if (!this.perf) return "crosshair";
+    if (!this.perf || px < HEAD) return "default";
     const sel = this.hit(px, py);
     if (!sel) return "crosshair";
     if (sel.kind === "expression") {
@@ -244,23 +278,24 @@ export class Timeline {
   private onDblClick(e: MouseEvent): void {
     if (!this.perf || !this.cfg) return;
     const { x, y } = this.local(e);
-    if (this.hit(x, y)) return;
-    const row = this.rowOf(y);
+    if (x < HEAD || this.hit(x, y)) return;
+    const row = this.rowAt(y);
     const t = round(this.tAt(x));
-    if (row === 2 || row === 3) this.beforeChange?.();
-    if (row === 2) {
+    if (row !== "expressions" && row !== "gestures") return;
+    this.beforeChange?.();
+    if (row === "expressions") {
       const emotions = Object.keys(this.cfg.emotions.emotions).filter((n) => n !== "neutre");
       const seg: ExpressionSegment = { start: t, end: round(Math.min(this.perf.duration, t + 2)), emotion: emotions[0] ?? "neutre", intensity: 0.8, source: "manuel" };
       this.perf.expressions.push(seg);
       this.perf.expressions.sort((a, b) => a.start - b.start);
       this.selection = { kind: "expression", index: this.perf.expressions.indexOf(seg) };
-    } else if (row === 3) {
+    } else {
       const clips = Object.keys(this.cfg.gestures.procedural);
       const g: GestureEvent = { at: t, clip: clips[0] ?? "salut", source: "manuel" };
       this.perf.gestures.push(g);
       this.perf.gestures.sort((a, b) => a.at - b.at);
       this.selection = { kind: "gesture", index: this.perf.gestures.indexOf(g) };
-    } else return;
+    }
     this.cb.onChange();
     this.cb.onSelect(this.selection);
     this.draw();
@@ -276,7 +311,6 @@ export class Timeline {
     }
   }
 
-  /** Supprime l'élément sélectionné. */
   deleteSelection(): boolean {
     if (!this.perf || !this.selection) return false;
     this.beforeChange?.();
@@ -297,170 +331,207 @@ export class Timeline {
     const H = this.canvas.clientHeight;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const css = getComputedStyle(this.canvas);
-    const colBg = css.getPropertyValue("--tl-bg") || "#0d0f12";
-    const colBg2 = css.getPropertyValue("--tl-bg2") || "#111418";
-    const colText = css.getPropertyValue("--tl-text") || "#c8ccd2";
-    const colMuted = css.getPropertyValue("--tl-muted") || "#7d838c";
-    const colAccent = css.getPropertyValue("--tl-accent") || "#7cc4ff";
+    const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+    const colBg = v("--tl-bg", "#0d0f12");
+    const colBg2 = v("--tl-bg2", "#111418");
+    const colHead = v("--tl-head", "#1a1e24");
+    const colText = v("--tl-text", "#c8ccd2");
+    const colMuted = v("--tl-muted", "#7d838c");
+    const colAccent = v("--tl-accent", "#7cc4ff");
+    const colWave = v("--tl-wave", "#5aa9e6");
     ctx.fillStyle = colBg;
     ctx.fillRect(0, 0, W, H);
     const perf = this.perf;
     const cfg = this.cfg;
+    ctx.font = "11px system-ui, sans-serif";
+    const rows = this.rows();
+    // fonds de lignes et en-têtes
+    rows.forEach((r, i) => {
+      ctx.fillStyle = i % 2 ? colBg2 : colBg;
+      ctx.fillRect(HEAD, r.y, W - HEAD, r.h);
+      ctx.fillStyle = colHead;
+      ctx.fillRect(0, r.y, HEAD, r.h);
+      ctx.fillStyle = colText;
+      ctx.fillText(r.label, 8, r.y + Math.min(r.h / 2 + 4, 16));
+      ctx.fillStyle = colBg2;
+      ctx.fillRect(0, r.y + r.h - 1, W, 1);
+    });
+    ctx.fillStyle = colHead;
+    ctx.fillRect(0, 0, W, RULER);
     if (!perf || !cfg) {
       ctx.fillStyle = colMuted;
       ctx.font = "13px system-ui, sans-serif";
-      ctx.fillText("Aucun projet chargé", 12, 40);
+      ctx.fillText("Aucun projet chargé", HEAD + 12, RULER + 30);
       return;
     }
-    const rowH = (H - RULER) / ROWS.length;
     const x = (t: number) => this.x(t);
-    ctx.font = "11px system-ui, sans-serif";
-
-    // règle
-    const step = niceStep(this.pxPerSec);
-    ctx.fillStyle = colBg2;
-    ctx.fillRect(0, 0, W, RULER);
-    ctx.fillStyle = colMuted;
-    ctx.strokeStyle = colMuted;
-    for (let t = Math.floor(this.scroll / step) * step; t <= perf.duration + step; t += step) {
-      const px = x(t);
-      if (px < -50 || px > W + 50) continue;
-      ctx.fillRect(px, RULER - 6, 1, 6);
-      ctx.fillText(t.toFixed(step < 1 ? 1 : 0) + " s", px + 3, 13);
-    }
-    // fond des lignes
-    ROWS.forEach((_, i) => {
-      ctx.fillStyle = i % 2 ? colBg2 : colBg;
-      ctx.fillRect(0, RULER + i * rowH, W, rowH);
-    });
-    // fin du projet
-    ctx.fillStyle = "rgba(127,127,127,0.25)";
-    ctx.fillRect(x(perf.duration), RULER, Math.max(0, W - x(perf.duration)), H - RULER);
-    const clipRow = (i: number, fn: () => void) => {
+    const t0 = this.scroll;
+    const t1 = this.scroll + (W - HEAD) / this.pxPerSec;
+    const clipArea = (r: { y: number; h: number }, fn: () => void) => {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(0, RULER + i * rowH, W, rowH);
+      ctx.rect(HEAD, r.y, W - HEAD, r.h);
       ctx.clip();
       fn();
       ctx.restore();
     };
+    const row = (id: RowId) => rows.find((r) => r.id === id)!;
+
+    // règle
+    const step = niceStep(this.pxPerSec);
+    ctx.fillStyle = colMuted;
+    for (let t = Math.floor(t0 / step) * step; t <= Math.min(perf.duration, t1) + step; t += step) {
+      const px = x(t);
+      if (px < HEAD || px > W) continue;
+      ctx.fillRect(px, RULER - 6, 1, 6);
+      ctx.fillText(fmtRuler(t, step), px + 3, 13);
+    }
+    // fin du projet
+    ctx.fillStyle = "rgba(127,127,127,0.25)";
+    if (x(perf.duration) < W) ctx.fillRect(x(perf.duration), RULER, W - x(perf.duration), H - RULER);
+
+    // audio
+    const ra = row("audio");
+    clipArea(ra, () => {
+      if (!this.audio) {
+        ctx.fillStyle = colMuted;
+        ctx.fillText("analyse de l'audio…", HEAD + 8, ra.y + ra.h / 2 + 4);
+        return;
+      }
+      const w = Math.max(1, Math.min(W - HEAD, x(Math.min(perf.duration, t1)) - HEAD));
+      const tEnd = t0 + w / this.pxPerSec;
+      if (this.audioView === "spectro") drawSpectrogram(ctx, this.audio, HEAD, w, t0, tEnd, ra.y + 2, ra.h - 4);
+      else drawWave(ctx, this.audio, HEAD, w, t0, tEnd, ra.y + 2, ra.h - 4, colWave);
+    });
     // mots
-    clipRow(0, () => {
-      for (const w of perf.words) {
-        const px = x(w.start);
-        const pw = Math.max(2, x(w.end) - px - 1);
-        if (px + pw < 0 || px > W) continue;
-        const active = this.t >= w.start && this.t < w.end;
+    const rw = row("words");
+    clipArea(rw, () => {
+      for (const wd of perf.words) {
+        if (wd.end < t0 || wd.start > t1) continue;
+        const px = x(wd.start);
+        const pw = Math.max(2, x(wd.end) - px - 1);
+        const active = this.t >= wd.start && this.t < wd.end;
         ctx.fillStyle = active ? colAccent : "rgba(127,150,180,0.35)";
-        ctx.fillRect(px, RULER + 5, pw, rowH - 10);
+        ctx.fillRect(px, rw.y + 5, pw, rw.h - 10);
         if (pw > 14) {
           ctx.save();
           ctx.beginPath();
-          ctx.rect(px, RULER, pw, rowH);
+          ctx.rect(px, rw.y, pw, rw.h);
           ctx.clip();
           ctx.fillStyle = active ? "#0b1016" : colText;
-          ctx.fillText(w.w, px + 3, RULER + rowH * 0.65);
+          ctx.fillText(wd.w, px + 3, rw.y + rw.h * 0.65);
           ctx.restore();
         }
       }
     });
     // visèmes
-    clipRow(1, () => {
-      for (const v of perf.visemes) {
-        const px = x(v.start);
-        const pw = Math.max(1, x(v.end) - px);
-        if (px + pw < 0 || px > W) continue;
-        ctx.fillStyle = SHAPE_COLORS[v.shape] ?? "#888";
-        ctx.fillRect(px, RULER + rowH + 7, pw, rowH - 14);
+    const rv = row("visemes");
+    clipArea(rv, () => {
+      for (const vs of perf.visemes) {
+        if (vs.end < t0 || vs.start > t1) continue;
+        const px = x(vs.start);
+        const pw = Math.max(1, x(vs.end) - px);
+        ctx.fillStyle = SHAPE_COLORS[vs.shape] ?? "#888";
+        ctx.fillRect(px, rv.y + 7, pw, rv.h - 14);
         if (pw > 12) {
           ctx.fillStyle = "#000000aa";
-          ctx.fillText(v.shape, px + 3, RULER + rowH + rowH * 0.65);
+          ctx.fillText(vs.shape, px + 3, rv.y + rv.h * 0.65);
         }
       }
     });
     // émotions
+    const re = row("expressions");
     const emotions = Object.keys(cfg.emotions.emotions);
-    clipRow(2, () => {
+    clipArea(re, () => {
       perf.expressions.forEach((e, i) => {
+        if (e.end < t0 || e.start > t1) return;
         const px = x(e.start);
         const pw = Math.max(2, x(e.end) - px);
-        if (px + pw < 0 || px > W) return;
         const selected = this.selection?.kind === "expression" && this.selection.index === i;
         ctx.globalAlpha = 0.35 + 0.65 * e.intensity;
         ctx.fillStyle = EMOTION_COLORS[Math.max(0, emotions.indexOf(e.emotion)) % EMOTION_COLORS.length];
-        roundRect(ctx, px, RULER + 2 * rowH + 6, pw, rowH - 12, 4);
+        roundRect(ctx, px, re.y + 6, pw, re.h - 12, 4);
         ctx.fill();
         ctx.globalAlpha = 1;
         if (selected) {
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 2;
-          roundRect(ctx, px, RULER + 2 * rowH + 6, pw, rowH - 12, 4);
+          roundRect(ctx, px, re.y + 6, pw, re.h - 12, 4);
           ctx.stroke();
         }
         ctx.fillStyle = "#fff";
-        ctx.fillText(`${e.emotion}${e.source === "balise" ? " [b]" : e.source === "manuel" ? " ✎" : ""} ${Math.round(e.intensity * 100)}%`, px + 4, RULER + 2 * rowH + rowH * 0.65);
+        ctx.fillText(`${e.emotion}${e.source === "balise" ? " [b]" : e.source === "manuel" ? " ✎" : ""} ${Math.round(e.intensity * 100)}%`, px + 4, re.y + re.h * 0.62);
       });
     });
     // gestes
-    clipRow(3, () => {
+    const rg = row("gestures");
+    clipArea(rg, () => {
       perf.gestures.forEach((g, i) => {
+        const dur = this.gestureDuration(g);
+        if (g.at + dur < t0 || g.at > t1) return;
         const px = x(g.at);
-        const pw = Math.max(3, x(g.at + this.gestureDuration(g)) - px);
-        if (px + pw < 0 || px > W) return;
+        const pw = Math.max(3, x(g.at + dur) - px);
         const selected = this.selection?.kind === "gesture" && this.selection.index === i;
         ctx.fillStyle = g.source === "balise" ? "#ffcc66" : g.source === "manuel" ? "#b8f0c4" : "#7cc4ff";
-        roundRect(ctx, px, RULER + 3 * rowH + 6, pw, rowH - 12, 4);
+        roundRect(ctx, px, rg.y + 6, pw, rg.h - 12, 4);
         ctx.fill();
         if (selected) {
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 2;
-          roundRect(ctx, px, RULER + 3 * rowH + 6, pw, rowH - 12, 4);
+          roundRect(ctx, px, rg.y + 6, pw, rg.h - 12, 4);
           ctx.stroke();
         }
         ctx.fillStyle = "#101418";
-        ctx.fillText(g.clip, px + 4, RULER + 3 * rowH + rowH * 0.65);
+        ctx.fillText(g.clip, px + 4, rg.y + rg.h * 0.62);
       });
     });
     // énergie + accents
-    clipRow(4, () => {
-      const y0 = RULER + 5 * rowH - 4;
+    const rn = row("energy");
+    clipArea(rn, () => {
+      const y0 = rn.y + rn.h - 4;
       ctx.strokeStyle = colAccent;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      const startI = Math.max(0, Math.floor(this.scroll * perf.energy.rate));
-      const endI = Math.min(perf.energy.values.length, Math.ceil((this.scroll + W / this.pxPerSec) * perf.energy.rate) + 1);
+      const startI = Math.max(0, Math.floor(t0 * perf.energy.rate));
+      const endI = Math.min(perf.energy.values.length, Math.ceil(t1 * perf.energy.rate) + 1);
       for (let i = startI; i < endI; i++) {
         const px = x(i / perf.energy.rate);
-        const py = y0 - perf.energy.values[i] * (rowH - 10);
+        const py = y0 - perf.energy.values[i] * (rn.h - 10);
         if (i === startI) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
       ctx.stroke();
       ctx.fillStyle = "#ff9f43";
-      for (const a of perf.accents) ctx.fillRect(x(a) - 1, RULER + 4 * rowH + 3, 2, rowH - 6);
+      for (const a of perf.accents) if (a >= t0 && a <= t1) ctx.fillRect(x(a) - 1, rn.y + 3, 2, rn.h - 6);
     });
-    // libellés de lignes
-    ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillRect(0, RULER, 64, H - RULER);
-    ctx.fillStyle = colText;
-    ROWS.forEach((r, i) => ctx.fillText(r, 6, RULER + i * rowH + 14));
     // tête de lecture
     const px = x(this.t);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(px - 1, 0, 2, H);
-    ctx.beginPath();
-    ctx.moveTo(px - 6, 0);
-    ctx.lineTo(px + 6, 0);
-    ctx.lineTo(px, 8);
-    ctx.closePath();
-    ctx.fill();
+    if (px >= HEAD) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(px - 1, 0, 2, H);
+      ctx.beginPath();
+      ctx.moveTo(px - 6, 0);
+      ctx.lineTo(px + 6, 0);
+      ctx.lineTo(px, 8);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 }
 
 function niceStep(pxPerSec: number): number {
   const target = 80 / pxPerSec;
-  const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60];
+  const steps = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60];
   return steps.find((s) => s >= target) ?? 60;
+}
+
+function fmtRuler(t: number, step: number): string {
+  if (step >= 1) {
+    const m = Math.floor(t / 60);
+    const s = Math.round(t - m * 60);
+    return m ? `${m}:${String(s).padStart(2, "0")}` : `${s} s`;
+  }
+  return `${t.toFixed(step < 0.1 ? 2 : 1)} s`;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

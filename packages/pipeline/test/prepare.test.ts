@@ -111,7 +111,9 @@ describe("avatar prepare (intégration, ffmpeg requis)", () => {
     expect(r.performance.words.map((w) => w.w)).toEqual(["Bonjour", "à", "vous", "tous,", "merci", "!"]);
     expect(r.performance.words[0].start).toBe(0.8);
     expect(r.performance.words[3].start).toBe(1.7);
-    expect(r.performance.expressions).toEqual([]);
+    // sans LLM : émotions et gestes procéduraux sur la durée de la parole
+    expect(r.performance.expressions.length).toBeGreaterThan(0);
+    expect(r.performance.expressions.every((e) => e.source === "procedural")).toBe(true);
   });
 
   it("mode B : balises, TTS simulée et réalignement", async () => {
