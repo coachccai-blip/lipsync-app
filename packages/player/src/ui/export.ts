@@ -1,5 +1,5 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import type { AllConfig } from "@avatar/shared";
+import { bubbleBackground, type AllConfig } from "@avatar/shared";
 import { bubbleGeometry } from "../bubble.js";
 
 export interface ExportOptions {
@@ -79,7 +79,7 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
   const ctx = out.getContext("2d")!;
   const { d, cx, cy } = bubbleGeometry(o.cfg.scene);
   const ring = o.cfg.scene.bubble.ring;
-  const bubbleFill = parseCssBackground(o.cfg.scene.bubble.background, ctx, cx - d / 2, cy - d / 2, d, d);
+  const bubbleFill = parseCssBackground(bubbleBackground(o.cfg.scene.bubble), ctx, cx - d / 2, cy - d / 2, d, d);
   const frameUs = 1e6 / fps;
   for (let n = 0; n < total; n++) {
     if (o.signal?.aborted) {

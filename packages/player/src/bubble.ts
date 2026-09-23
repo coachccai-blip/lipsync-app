@@ -1,4 +1,4 @@
-import type { SceneConfig } from "@avatar/shared";
+import { bubbleBackground, type SceneConfig } from "@avatar/shared";
 
 /** Met en page la bulle CSS (taille, position, fond, anneau) et renvoie son diamètre. */
 export function layoutBubble(cfg: SceneConfig, background: "green" | "transparent"): number {
@@ -20,7 +20,7 @@ export function layoutBubble(cfg: SceneConfig, background: "green" | "transparen
     height: `${d}px`,
     left: `${Math.round(cx - d / 2)}px`,
     top: `${Math.round(cy - d / 2)}px`,
-    background: cfg.bubble.background,
+    background: bubbleBackground(cfg.bubble),
   });
   ring.style.boxShadow = cfg.bubble.ring.enabled ? `inset 0 0 0 ${cfg.bubble.ring.width}px ${cfg.bubble.ring.color}` : "none";
   return d;

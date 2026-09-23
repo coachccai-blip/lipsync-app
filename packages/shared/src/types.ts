@@ -173,7 +173,12 @@ export interface SceneConfig {
     margin: number;
     /** Position du centre de la bulle : 'center' ou pixels depuis le bord gauche / haut. */
     position: { x: number | "center"; y: number | "center" };
+    /** Fond CSS libre (utilisé si `fondLibre` est vrai ou si `couleur` est vide). */
     background: string;
+    /** Teinte de base : le dégradé qui met l'avatar en valeur est calculé à partir d'elle. */
+    couleur?: string;
+    /** Vrai pour utiliser `background` tel quel au lieu du dégradé calculé. */
+    fondLibre?: boolean;
     ring: { enabled: boolean; width: number; color: string };
   };
   camera: {

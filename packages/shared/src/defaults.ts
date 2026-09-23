@@ -182,6 +182,8 @@ export const DEFAULT_SCENE: SceneConfig = {
     margin: 40,
     position: { x: "center", y: "center" },
     background: "radial-gradient(circle at 50% 35%, #fff7e6 0%, #f3d9b1 60%, #e6c28f 100%)",
+    couleur: "#f3d9b1",
+    fondLibre: false,
     ring: { enabled: true, width: 14, color: "#ffffff" },
   },
   camera: {

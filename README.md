@@ -78,7 +78,7 @@ Sans modèle, un **personnage de substitution** procédural (tête, yeux, sourci
 - **Scène et transport** : lecture avec l'audio, image par image (← →), boucle, zoom de la timeline.
 - **Timeline d'éditeur** : piste audio (forme d'onde ou spectrogramme calculés dans le navigateur), mots, visèmes, émotions, gestes, énergie et accents, avec en-têtes de pistes et hauteur réglable ; clic pour sélectionner, glisser pour déplacer, bords pour redimensionner, double-clic pour ajouter, Suppr pour supprimer ; `performance.json` est enregistré automatiquement et validé.
 - **Pistes** : formulaire d'édition de la sélection et bouton « Générer émotions et gestes sur toute la durée » (procédural, sans LLM : phrases, énergie, accents, ponctuation), qui conserve balises et modifications manuelles.
-- **Réglages** : choix du modèle parmi `assets/models/`, test d'un geste à la volée, format et position de la bulle (préréglages carré, paysage bulle à droite ou à gauche, portrait), cadrage, lumière, bouche, expressions, vie procédurale, gestes ; chaque curseur s'applique immédiatement, « Enregistrer » écrit dans `config/`.
+- **Réglages** : choix du modèle parmi `assets/models/`, test d'un geste à la volée, **fond derrière l'avatar** (palette de teintes ou couleur libre : le dégradé radial qui met l'avatar en valeur, halo clair derrière la tête et bord plus profond, est calculé automatiquement ; un champ CSS libre reste disponible), format et position de la bulle (préréglages carré, paysage bulle à droite ou à gauche, portrait), cadrage, lumière, bouche, expressions, vie procédurale, gestes ; chaque curseur s'applique immédiatement, « Enregistrer » écrit dans `config/`.
 - **Poses** : éditeur de blendshapes pour chaque émotion (`emotions.json`) et chaque forme de bouche Rhubarb (`visemes.json`), avec aperçu figé sur le modèle ; création d'émotions.
 - **Exporter MP4** (bouton de la barre du haut) : rendu complet de la vidéo puis téléchargement automatique du `.mp4`. En local, c'est le rendu serveur (Chrome headless + ffmpeg, H.264 + AAC, sous-titres SRT à côté). Sans ffmpeg ou Chrome, et sur la page GitHub Pages, la vidéo est encodée **dans le navigateur** (WebCodecs H.264 + AAC, muxage MP4 en mémoire) avec progression et annulation ; Chrome ou Edge recommandés (Chromium sans codecs propriétaires retombe sur VP9 / Opus, signalé par un message).
 - **Rendu** : mp4 fond vert, ProRes 4444 ou WebM alpha, extrait `--debut/--fin`, **brouillon** (demi-résolution, quatre fois plus rapide), **sous-titres SRT**, image PNG fixe de la position courante (bulle comprise, fond transparent possible), planche de contrôle, liste des fichiers produits avec aperçu.
@@ -145,6 +145,8 @@ Le schéma JSON est exporté par `PERFORMANCE_JSON_SCHEMA` (`packages/shared/src
 ---
 
 ## 3. Réglages visuels (`config/`)
+
+**Fond derrière l'avatar** : `scene.bubble.couleur` (hexadécimal) définit la teinte ; le dégradé est calculé par `gradientFromColor` (halo à 50 % / 35 %, teinte à 60 %, bord plus sombre et plus saturé à 100 %), identique dans la page, le rendu serveur et l'export navigateur. `scene.bubble.fondLibre: true` utilise `scene.bubble.background` (CSS quelconque) à la place.
 
 Tout ce qui est esthétique est dans `config/` ; la prévisualisation se recharge à chaque sauvegarde.
 

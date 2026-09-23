@@ -1,5 +1,5 @@
 import type { AllConfig, ExpressionSegment, GestureEvent, Performance } from "@avatar/shared";
-import { normalizePerformance, validatePerformance } from "@avatar/shared";
+import { BUBBLE_PALETTE, gradientFromColor, normalizePerformance, validatePerformance } from "@avatar/shared";
 import type { LoadReport, ProjectPayload } from "../api.js";
 import { api, type CheckItem, type JobEvent, type JobSummary, type ProjectSummary } from "./api.js";
 import { FORMAT_PRESETS, SECTIONS, buildControls } from "./controls.js";
@@ -1193,6 +1193,15 @@ export class StudioApp {
     }
     el.append(h("h3", null, "Préréglages de format"));
     el.append(h("div.row", null, ...FORMAT_PRESETS.map((p) => h("button.small", { onclick: () => { p.apply(cfg); this.onConfigEdited("scene"); this.renderPanel("reglages"); } }, p.label))));
+    el.append(h("h3", null, "Fond derrière l'avatar"));
+    el.append(
+      h("div.row.palette", null, ...BUBBLE_PALETTE.map((p) => h("button", {
+        title: `${p.label} ${p.color}`,
+        class: cfg.scene.bubble.couleur?.toLowerCase() === p.color && !cfg.scene.bubble.fondLibre ? "swatch active" : "swatch",
+        onclick: () => { cfg.scene.bubble.couleur = p.color; cfg.scene.bubble.fondLibre = false; this.onConfigEdited("scene"); this.renderPanel("reglages"); },
+      }, h("i.dot", { style: { background: gradientFromColor(p.color) } }), h("span", null, p.label)))),
+      h("p.hint", null, "Chaque teinte donne un dégradé radial calculé pour mettre l'avatar en valeur : halo clair derrière la tête, bord plus profond. Une couleur précise se choisit dans « Format et bulle »."),
+    );
     const openState = (id: string) => localStorage.getItem(`avatar-sec-${id}`) !== "0";
     for (const spec of SECTIONS) {
       const dirty = this.dirtyConfig.has(spec.file);
