@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { SceneConfig } from "@avatar/shared";
+import { layoutBubble } from "./bubble.js";
 
 export interface WebGLInfo {
   renderer: string;
@@ -60,23 +61,8 @@ export class Stage {
   /** Applique (ou ré-applique) résolution, bulle, fond, éclairage et caméra sans recréer le renderer. */
   applyConfig(cfg: SceneConfig, background: "green" | "transparent"): void {
     this.cfg = cfg;
-    const { width, height } = cfg.resolution;
-    document.documentElement.style.setProperty("--page-w", `${width}px`);
-    document.documentElement.style.setProperty("--page-h", `${height}px`);
-    document.documentElement.style.setProperty("--page-bg", cfg.background.color);
-    document.body.classList.toggle("transparent", background === "transparent");
-    this.diameter = cfg.bubble.diameter === "auto" ? Math.min(width, height) - 2 * cfg.bubble.margin : cfg.bubble.diameter;
-    const d = this.diameter;
-    const cx = cfg.bubble.position?.x === "center" || cfg.bubble.position === undefined ? width / 2 : cfg.bubble.position.x;
-    const cy = cfg.bubble.position?.y === "center" || cfg.bubble.position === undefined ? height / 2 : cfg.bubble.position.y;
-    Object.assign(this.bubble.style, {
-      width: `${d}px`,
-      height: `${d}px`,
-      left: `${Math.round(cx - d / 2)}px`,
-      top: `${Math.round(cy - d / 2)}px`,
-      background: cfg.bubble.background,
-    });
-    this.ring.style.boxShadow = cfg.bubble.ring.enabled ? `inset 0 0 0 ${cfg.bubble.ring.width}px ${cfg.bubble.ring.color}` : "none";
+    const d = layoutBubble(cfg, background);
+    this.diameter = d;
     if (this.renderer.domElement.width !== d) this.renderer.setSize(d, d, false);
     this.renderer.toneMappingExposure = cfg.lighting.exposure;
     this.setupLights();
@@ -196,5 +182,6 @@ export class Stage {
     this.envTexture?.dispose();
     this.pmrem?.dispose();
     this.renderer.dispose();
+    this.renderer.domElement.remove();
   }
 }

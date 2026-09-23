@@ -102,6 +102,7 @@ export function buildPayload(projectDir: string, root: string, background: "gree
   const performance = loadPerformance(projectDir, configVocab(config));
   const modelPath = path.resolve(root, config.scene.model);
   const modelUrl = existsSync(modelPath) ? `/model/${encodeURIComponent(path.basename(modelPath))}` : undefined;
+  void modelUrl;
   const clipsDir = path.join(root, "assets", "clips");
   const clipUrls: Record<string, string> = {};
   if (existsSync(clipsDir)) {
@@ -434,7 +435,12 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       return send(res, safeJoin(projectDir(name), rest.join("/")));
     }
     if (p.startsWith("/project/")) return send(res, safeJoin(projectDir(project), p.slice("/project/".length)));
-    if (p.startsWith("/model/")) return send(res, path.resolve(root, loadConfig(root).scene.model));
+    if (p.startsWith("/model/")) {
+      // GLB : le fichier lui-même ; marionnette (manifeste .json) : les fichiers de son dossier
+      const modelPath = path.resolve(root, loadConfig(root).scene.model);
+      if (modelPath.endsWith(".json")) return send(res, safeJoin(path.dirname(modelPath), p.slice("/model/".length)));
+      return send(res, modelPath);
+    }
     if (p.startsWith("/clips/")) return send(res, safeJoin(path.join(root, "assets", "clips"), p.slice("/clips/".length)));
     if (p.startsWith("/config/")) return send(res, safeJoin(path.join(root, "config"), p.slice("/config/".length)));
     return send(res, safeJoin(playerDist, p === "/" ? "index.html" : p));

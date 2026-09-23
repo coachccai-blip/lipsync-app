@@ -55,5 +55,12 @@ export function checkEnvironment(options: { root?: string; findChrome?: () => st
   items.push({ id: "player", label: "Player construit", ok: existsSync(dist), detail: existsSync(dist) ? "packages/player/dist" : "npm run build", impact: "studio et rendu" });
   const modelsDir = path.join(root, "assets", "models");
   const models = existsSync(modelsDir) ? readdirSync(modelsDir).filter((f) => /\.(glb|gltf)$/i.test(f)).map((f) => `assets/models/${f}`) : [];
+  const puppetsDir = path.join(root, "assets");
+  if (existsSync(puppetsDir)) {
+    for (const d of readdirSync(puppetsDir)) {
+      const manifest = path.join(puppetsDir, d, "marionnette.json");
+      if (existsSync(manifest)) models.push(`assets/${d}/marionnette.json`);
+    }
+  }
   return { items, models };
 }

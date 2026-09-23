@@ -46,8 +46,23 @@ export const SECTIONS: SectionSpec[] = [
     ],
   },
   {
+    id: "marionnette",
+    title: "Marionnette 2D",
+    file: "scene",
+    hint: "Actif quand le modèle est un manifeste marionnette.json (images alignées). Les images sont dans assets/<dossier>/.",
+    controls: [
+      { path: "scene.marionnette.zoom", label: "Zoom", type: "range", min: 0.5, max: 2, step: 0.01 },
+      { path: "scene.marionnette.offsetX", label: "Décalage horizontal", type: "range", min: -0.5, max: 0.5, step: 0.005 },
+      { path: "scene.marionnette.offsetY", label: "Décalage vertical", type: "range", min: -0.5, max: 0.5, step: 0.005 },
+      { path: "scene.marionnette.motion", label: "Mouvements de tête (px/°)", type: "range", min: 0, max: 8, step: 0.1 },
+      { path: "scene.marionnette.breathing", label: "Respiration", type: "range", min: 0, max: 0.03, step: 0.001 },
+      { path: "scene.marionnette.mouthEnergy", label: "Étirement de la bouche (énergie)", type: "range", min: 0, max: 0.3, step: 0.01 },
+      { path: "scene.marionnette.feather", label: "Adoucissement des bords (px)", type: "range", min: 0, max: 60, step: 1 },
+    ],
+  },
+  {
     id: "cadrage",
-    title: "Cadrage",
+    title: "Cadrage (modèle 3D)",
     file: "scene",
     controls: [
       { path: "scene.camera.fov", label: "Focale (fov °)", type: "range", min: 10, max: 60, step: 0.5 },
@@ -59,7 +74,7 @@ export const SECTIONS: SectionSpec[] = [
   },
   {
     id: "lumiere",
-    title: "Lumière",
+    title: "Lumière (modèle 3D)",
     file: "scene",
     hint: "Positions relatives au centre du cadre (x droite, y haut, z vers la caméra).",
     controls: [

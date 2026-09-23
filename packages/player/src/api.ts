@@ -17,6 +17,8 @@ export interface ProjectPayload {
 }
 
 export interface LoadReport {
+  /** Type de personnage : modèle 3D (GLB ou substitution) ou marionnette 2D. */
+  kind?: "3d" | "marionnette";
   model: string;
   placeholder: boolean;
   meshesWithMorphs: number;
@@ -33,6 +35,7 @@ export interface LoadReport {
   software: boolean;
   warnings: string[];
   modelHeight: number;
+  marionnette?: { mouths: string[]; eyes: string[]; emotions: string[]; regions: { mouth: { x: number; y: number; w: number; h: number }; eyes: { x: number; y: number; w: number; h: number } }; size: [number, number] };
 }
 
 declare global {

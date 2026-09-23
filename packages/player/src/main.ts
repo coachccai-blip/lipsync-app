@@ -5,11 +5,15 @@ import { createAnimator, makeTestPerformance, mergeConfig, normalizePerformance,
 import { Stage, probeWebGL } from "./scene.js";
 import { applyFrame, loadGltf, loadModel, type LoadedModel } from "./model.js";
 import { ClipGestureSource } from "./clips.js";
+import { Puppet, PuppetStage } from "./puppet.js";
 import type { LoadReport, PlayerMode, ProjectPayload } from "./api.js";
 
 /** État du player : scène, modèle, animateur. Une seule instance par page. */
 class Player {
   stage?: Stage;
+  puppetStage?: PuppetStage;
+  puppet?: Puppet;
+  private puppetUrl?: string;
   model?: LoadedModel;
   animator?: Animator;
   clips?: ClipGestureSource;
@@ -29,6 +33,35 @@ class Player {
     const gl = probeWebGL();
     const background = payload.background ?? "green";
 
+    const isPuppet = Boolean(payload.modelUrl && /\.json(\?.*)?$/i.test(payload.modelUrl));
+    if (isPuppet) {
+      // ---- marionnette 2D ----
+      if (this.stage) {
+        this.stage.dispose();
+        this.stage = undefined;
+        this.model = undefined;
+        this.currentModelUrl = undefined;
+      }
+      if (!this.puppetStage) this.puppetStage = new PuppetStage(cfg.scene, background);
+      else this.puppetStage.applyConfig(cfg.scene, background);
+      if (!this.puppet || this.puppetUrl !== payload.modelUrl) {
+        this.puppet = await Puppet.load(payload.modelUrl!, cfg.scene.marionnette);
+        this.puppetUrl = payload.modelUrl;
+      } else this.puppet.rebuild(cfg.scene.marionnette.feather);
+      this.animator = createAnimator(perf, cfg);
+      this.perf = perf;
+      this.cfg = cfg;
+      this.clips = undefined;
+      this.report = this.puppet.report;
+      await this.renderFrame(this.lastT <= perf.duration ? this.lastT : 0);
+      return this.report;
+    }
+    if (this.puppetStage) {
+      this.puppetStage.dispose();
+      this.puppetStage = undefined;
+      this.puppet = undefined;
+      this.puppetUrl = undefined;
+    }
     if (!this.stage) this.stage = new Stage(cfg.scene, background);
     else this.stage.applyConfig(cfg.scene, background);
 
@@ -80,6 +113,7 @@ class Player {
     this.cfg = cfg;
 
     this.report = {
+      kind: "3d",
       model: payload.modelUrl ?? "(personnage de substitution)",
       ...this.model.report,
       gestureSource,
@@ -94,9 +128,14 @@ class Player {
   }
 
   async renderFrame(t: number): Promise<void> {
-    if (!this.stage || !this.model || !this.animator) throw new Error("Aucun projet chargé : appelez loadProject() d'abord.");
+    if (!this.animator) throw new Error("Aucun projet chargé : appelez loadProject() d'abord.");
     this.lastT = t;
     const frame = this.animator.frameAt(t);
+    if (this.puppet && this.puppetStage) {
+      this.puppetStage.render(this.puppet, frame, this.perf?.energy);
+      return;
+    }
+    if (!this.stage || !this.model) throw new Error("Aucun modèle chargé.");
     if (this.overrideMorphs) frame.morphs = { ...this.overrideMorphs };
     applyFrame(this.model, frame, this.clips && this.report?.gestureSource === "clips" ? () => this.clips!.update(t) : undefined);
     this.stage.render();

@@ -1,6 +1,6 @@
 import type { AllConfig, BoneRotations, MorphWeights, Performance } from "../types.js";
-import { mouthWeightsAt, speakingFactorAt } from "./mouth.js";
-import { expressionWeightsAt } from "./expressions.js";
+import { mouthWeightsAt, shapeWeightsAt, speakingFactorAt } from "./mouth.js";
+import { emotionWeightsAt, expressionWeightsAt } from "./expressions.js";
 import { buildLifeSchedule, lifeAt, type LifeSchedule } from "./life.js";
 import { ProceduralGestureSource, type GestureSource } from "./gestures.js";
 import { clamp } from "../math.js";
@@ -15,6 +15,12 @@ export interface FrameState {
   bones: BoneRotations;
   /** Facteur de parole 0..1 (pour l'affichage). */
   speaking: number;
+  /** Poids des formes de bouche Rhubarb (A..H, X), somme <= 1 : mode marionnette. */
+  shapes: Record<string, number>;
+  /** Poids de chaque émotion active (0..1) : mode marionnette. */
+  emotions: Record<string, number>;
+  /** Clignement 0 (ouvert) .. 1 (fermé). */
+  blink: number;
 }
 
 export interface Animator {
@@ -37,6 +43,8 @@ export function createAnimator(perf: Performance, cfg: AllConfig, gestures?: Ges
     const bones: BoneRotations = {};
 
     const speaking = speakingFactorAt(t, perf.visemes, cfg.visemes);
+    const shapes = shapeWeightsAt(t, perf.visemes, cfg.visemes);
+    const emotions = emotionWeightsAt(t, perf.expressions, cfg.emotions);
     const mouth = mouthWeightsAt(t, perf.visemes, perf.energy, cfg.visemes);
     const expr = expressionWeightsAt(t, perf.expressions, cfg.emotions, speaking);
     const life = lifeAt(t, schedule, cfg.scene.life, perf.accents);
@@ -57,7 +65,7 @@ export function createAnimator(perf: Performance, cfg: AllConfig, gestures?: Ges
     }
 
     for (const k in morphs) morphs[k] = clamp(morphs[k]);
-    return { t, morphs, bones, speaking, restPose: cfg.gestures.restPose ?? {} };
+    return { t, morphs, bones, speaking, restPose: cfg.gestures.restPose ?? {}, shapes, emotions, blink: life.morphs.eyeBlinkLeft ?? 0 };
   };
 
   return { frameAt, schedule, gestures: gestureSource };

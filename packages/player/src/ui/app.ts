@@ -646,7 +646,8 @@ export class StudioApp {
         this.renderReglages(el);
         break;
       case "poses":
-        if (this.cfg) this.poseEditor.render(el, this.cfg);
+        if (this.player.report?.kind === "marionnette") el.append(h("div.empty", null, "En mode marionnette, les poses sont des images : remplacez les fichiers de bouches, d'yeux et d'émotions dans le dossier du manifeste (assets/marionnette/). Les mélanges se règlent dans Réglages → Marionnette 2D."));
+        else if (this.cfg) this.poseEditor.render(el, this.cfg);
         else el.append(h("div.empty", null, "Chargement de la configuration…"));
         break;
       case "rendu":
@@ -773,6 +774,17 @@ export class StudioApp {
   private renderModelReport(el: HTMLElement): void {
     const r = this.player.report;
     if (!r) return;
+    if (r.kind === "marionnette" && r.marionnette) {
+      const m = r.marionnette;
+      const lines = [
+        `marionnette 2D : ${r.model}`,
+        `images ${m.size[0]}×${m.size[1]} · bouches : ${m.mouths.join(", ") || "aucune"} · yeux : ${m.eyes.join(", ") || "aucun"} · émotions : ${m.emotions.join(", ") || "aucune"}`,
+        `zone bouche : x ${m.regions.mouth.x} y ${m.regions.mouth.y} ${m.regions.mouth.w}×${m.regions.mouth.h} · zone yeux : x ${m.regions.eyes.x} y ${m.regions.eyes.y} ${m.regions.eyes.w}×${m.regions.eyes.h}`,
+        ...r.warnings.map((w) => `⚠ ${w}`),
+      ];
+      el.append(h("details.section", null, h("summary", null, "Marionnette et calques", r.warnings.length ? h("span.chip.warn.dirty", null, `${r.warnings.length}`) : null), h("div.body", null, h("div.report", null, lines.join("\n")))));
+      return;
+    }
     const lines = [
       `modèle : ${r.model}`,
       `WebGL : ${r.renderer}${r.software ? " (logiciel)" : ""}`,
@@ -948,7 +960,7 @@ export class StudioApp {
       };
       el.append(h("div.row", null, modelSel), h("p.hint", null, "Fichiers .glb de assets/models/. Le changement est enregistré et le projet rechargé."));
     }
-    if (this.perf && this.cfg) {
+    if (this.perf && this.cfg && this.player.report?.kind !== "marionnette") {
       el.append(h("h3", null, "Tester un geste ici"));
       el.append(h("div.row", null, ...Object.keys(cfg.gestures.procedural).map((clip) => h("button.small", { onclick: () => this.testGesture(clip) }, clip))));
       el.append(h("p.hint", null, "Joue le geste à la tête de lecture sans l'ajouter aux pistes."));

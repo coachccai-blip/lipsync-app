@@ -1,6 +1,6 @@
 {
   "_doc": "Modèle, résolution, cadence, cadrage caméra, éclairage (positions relatives au centre du cadre), bulle, fond vert et paramètres de vie procédurale. Tout est éditable ; la prévisualisation se recharge à chaud.",
-  "model": "assets/models/mpfb-cc0.glb",
+  "model": "assets/marionnette/marionnette.json",
   "resolution": {
     "width": 1080,
     "height": 1080
@@ -117,5 +117,14 @@
       "raiseOnAccent": 0.25,
       "duration": 0.35
     }
+  },
+  "marionnette": {
+    "zoom": 1,
+    "offsetX": 0,
+    "offsetY": 0,
+    "motion": 2.5,
+    "breathing": 0.006,
+    "feather": 18,
+    "mouthEnergy": 0.08
   }
 }

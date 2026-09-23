@@ -32,3 +32,15 @@ export function dominantEmotionAt(t: number, segments: ExpressionSegment[]): str
   for (const s of segments) if (t >= s.start && t < s.end && (!best || s.intensity > best.intensity)) best = s;
   return best?.emotion;
 }
+
+/** Poids (0..1) de chaque émotion à t : intensité × fondu, indépendamment des blendshapes. */
+export function emotionWeightsAt(t: number, segments: ExpressionSegment[], cfg: EmotionConfig): Record<string, number> {
+  const fade = cfg.fadeMs / 1000;
+  const out: Record<string, number> = {};
+  for (const seg of segments) {
+    if (t < seg.start - fade || t > seg.end + fade || seg.emotion === "neutre") continue;
+    const w = envelope(t, seg.start, seg.end, fade) * clamp(seg.intensity);
+    if (w > 0) out[seg.emotion] = clamp((out[seg.emotion] ?? 0) + w);
+  }
+  return out;
+}

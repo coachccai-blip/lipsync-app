@@ -202,6 +202,24 @@ export interface SceneConfig {
     environment: { enabled: boolean; intensity: number };
   };
   life: LifeConfig;
+  /** Réglages du mode marionnette 2D (modèle = manifeste marionnette.json). */
+  marionnette: MarionnetteConfig;
+}
+
+export interface MarionnetteConfig {
+  /** Zoom de l'image dans la bulle (1 = l'image couvre la bulle). */
+  zoom: number;
+  /** Décalage du centre, en fraction de la bulle (-0.5..0.5). */
+  offsetX: number;
+  offsetY: number;
+  /** Amplitude des micro-mouvements de tête (pixels par degré). */
+  motion: number;
+  /** Amplitude de la respiration (fraction d'échelle). */
+  breathing: number;
+  /** Adoucissement des bords des zones découpées, en pixels de l'image source. */
+  feather: number;
+  /** Étirement vertical de la bouche selon l'énergie (0 = aucun). */
+  mouthEnergy: number;
 }
 
 export interface BoneConfig {

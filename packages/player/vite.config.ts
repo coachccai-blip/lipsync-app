@@ -38,6 +38,7 @@ function repoFiles(): Plugin {
       copyDir(path.join(repoRoot, "config"), path.join(out, "config"), (f) => f.endsWith(".json"));
       copyDir(path.join(repoRoot, "assets", "models"), path.join(out, "assets", "models"), (f) => /\.(glb|gltf|bin|png|jpg|jpeg|webp)$/i.test(f));
       copyDir(path.join(repoRoot, "assets", "clips"), path.join(out, "assets", "clips"), (f) => /\.(glb|gltf|bin)$/i.test(f));
+      copyDir(path.join(repoRoot, "assets", "marionnette"), path.join(out, "assets", "marionnette"), (f) => /\.(png|jpg|jpeg|webp|json)$/i.test(f));
     },
   };
 }

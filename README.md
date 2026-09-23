@@ -43,6 +43,15 @@ npm run avatar -- check   # bilan : outils, variables, modèle, player
 - Modèle : télécharger `ggml-small.bin` (rapide) ou `ggml-medium.bin` (plus précis) depuis <https://huggingface.co/ggerganov/whisper.cpp/tree/main>.
 - Dans `.env` : `WHISPER_BIN=/chemin/whisper-cli` et `WHISPER_MODEL=/chemin/ggml-small.bin`.
 
+### Marionnette 2D (personnage illustré)
+
+Le mode marionnette anime une illustration à partir d'images alignées : une base bouche fermée, une image par forme de bouche Rhubarb (X, A, B, C, D, E, F, G, H), les yeux mi-clos et fermés pour les clignements, et une image par émotion (sourcils et yeux). Les zones de la bouche et des yeux sont découpées automatiquement par différence avec la base, les bords sont adoucis, le fond uni est rendu transparent, et les mêmes couches d'animation qu'en 3D s'appliquent : fondus entre bouches, étirement selon l'énergie, clignements, émotions, micro-mouvements de tête, respiration, hochements.
+
+- Dossier : `assets/marionnette/` avec `marionnette.json` (manifeste : fichiers, couleur de fond à détourer, zones facultatives). C'est le modèle par défaut de `config/scene.json`.
+- Génération des images : `docs/prompts-marionnette-2d.xlsx` contient un prompt par image pour un outil d'édition d'images (ChatGPT), avec les noms de fichiers attendus.
+- Réglages : Réglages → Marionnette 2D dans le studio (zoom, décalages, mouvements de tête, respiration, étirement de la bouche, adoucissement des bords).
+- Les gestes de bras n'existent pas en 2D ; `acquiescement` et `negation` (mouvements de tête) fonctionnent.
+
 ### Modèle 3D
 
 Un avatar de démonstration **CC0** est fourni : `assets/models/mpfb-cc0.glb` (créé avec MakeHuman/MPFB, squelette Mixamo, 52 blendshapes ARKit, style réaliste ; voir `assets/models/LICENCE-mpfb.md`). Il sert à valider toute la chaîne et s'affiche sur la page GitHub Pages.
@@ -158,11 +167,11 @@ Points à vérifier à l'œil : cadrage (marge au-dessus de la tête, place pour
 packages/
   shared/     types, validation de performance.json, PRNG, les 4 couches d'animation (fonctions pures de t)
   pipeline/   audio, tts (Azure), transcribe (whisper.cpp), align, tags, rhubarb, energy, annotate (Anthropic), cache, prepare
-  player/     page Three.js : scène, bulle, modèle, clips, window.loadProject / renderFrame(t) ; ui/ = studio (timeline, panneaux)
+  player/     page Three.js : scène, bulle, modèle, clips, marionnette 2D (puppet.ts), window.loadProject / renderFrame(t) ; ui/ = studio
   renderer/   serveur local et API du studio (projets, config, jobs, journal), Chrome headless (Puppeteer), capture PNG → ffmpeg, planche
   cli/        commandes studio, preview, prepare, render, planche, test-project, check
 config/       scene.json, visemes.json, emotions.json, gestures.json, bones.json
-assets/       models/ (GLB, non versionné), clips/ (animations externes)
+assets/       models/ (GLB), clips/ (animations externes), marionnette/ (images du personnage 2D + manifeste)
 scripts/      setup, inspect-model, smoke
 tests/        WAV de référence versionné, test de déterminisme du rendu, test du script d'inspection
 projets/      dossiers de travail (non versionnés)

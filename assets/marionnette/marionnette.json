@@ -1,0 +1,28 @@
+{
+  "_doc": "Marionnette 2D : images alignées sur base.png. Les zones bouche et yeux sont détectées automatiquement par différence avec la base (ou fixées ici via regions). keyColor : couleur de fond à rendre transparente (null = conserver le fond).",
+  "base": "base.png",
+  "mouths": {
+    "X": "bouche_X.png",
+    "A": "bouche_A.png",
+    "B": "bouche_B.png",
+    "C": "bouche_C.png",
+    "D": "bouche_D.png",
+    "E": "bouche_E.png",
+    "F": "bouche_F.png",
+    "G": "bouche_G.png",
+    "H": "bouche_H.png"
+  },
+  "eyes": {
+    "half": "yeux_mi_clos.png",
+    "closed": "yeux_fermes.png"
+  },
+  "emotions": {
+    "enjoué": "emotion_enjoue.png",
+    "surpris": "emotion_surpris.png",
+    "sérieux": "emotion_serieux.png",
+    "pensif": "emotion_pensif.png"
+  },
+  "keyColor": "auto",
+  "keyTolerance": 0.12,
+  "regions": null
+}
