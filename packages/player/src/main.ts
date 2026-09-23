@@ -144,6 +144,11 @@ class Player {
   getDuration(): number {
     return this.perf?.duration ?? 0;
   }
+
+  /** Canvas du personnage (2D ou WebGL), pour l'export dans le navigateur. */
+  captureCanvas(): HTMLCanvasElement | undefined {
+    return this.puppetStage?.canvas ?? this.stage?.renderer.domElement;
+  }
 }
 
 const player = new Player();
@@ -196,6 +201,7 @@ window.avatarReady = (async () => {
     }
     const { StudioApp } = await import("./ui/app.js");
     const app = new StudioApp(player, mode === "studio" ? "studio" : "demo");
+    window.__studio = app; // accès console / tests
     if (mode === "studio") {
       await app.start();
       return;

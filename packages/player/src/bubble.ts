@@ -25,3 +25,11 @@ export function layoutBubble(cfg: SceneConfig, background: "green" | "transparen
   ring.style.boxShadow = cfg.bubble.ring.enabled ? `inset 0 0 0 ${cfg.bubble.ring.width}px ${cfg.bubble.ring.color}` : "none";
   return d;
 }
+
+/** Géométrie de la bulle dans la page : diamètre et centre (pixels). */
+export function bubbleGeometry(cfg: SceneConfig): { d: number; cx: number; cy: number } {
+  const { width, height } = cfg.resolution;
+  const d = cfg.bubble.diameter === "auto" ? Math.min(width, height) - 2 * cfg.bubble.margin : cfg.bubble.diameter;
+  const pos = cfg.bubble.position ?? { x: "center", y: "center" };
+  return { d, cx: pos.x === "center" ? width / 2 : pos.x, cy: pos.y === "center" ? height / 2 : pos.y };
+}

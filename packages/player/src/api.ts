@@ -47,5 +47,6 @@ declare global {
     setOverrideMorphs: (m: Record<string, number> | null) => void;
     avatarReady: Promise<void>;
     __avatarError?: string;
+    __studio?: unknown;
   }
 }

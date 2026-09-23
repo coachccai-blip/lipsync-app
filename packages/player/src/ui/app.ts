@@ -6,12 +6,14 @@ import { FORMAT_PRESETS, SECTIONS, buildControls } from "./controls.js";
 import { clear, download, fmtBytes, fmtTime, h, icon } from "./dom.js";
 import { EMOTION_COLORS, Timeline } from "./timeline.js";
 import { analyzeAudio, type AudioAnalysis } from "./audio.js";
+import { browserExportSupported, exportMp4 } from "./export.js";
 import { analyzeEnergy, approximateLipsync, autoTracks } from "@avatar/shared";
 import { PoseEditor } from "./poses.js";
 
 export interface PlayerLike {
   load(payload: ProjectPayload): Promise<LoadReport>;
   renderFrame(t: number): Promise<void>;
+  captureCanvas(): HTMLCanvasElement | undefined;
   report?: LoadReport;
 }
 
@@ -67,6 +69,7 @@ export class StudioApp {
   private models: string[] = [];
   private audioAnalysis?: AudioAnalysis;
   private audioAnalysisUrl?: string;
+  private exportAbort?: AbortController;
   private els!: {
     projectSelect: HTMLSelectElement;
     chips: HTMLElement;
@@ -137,6 +140,7 @@ export class StudioApp {
       this.mode === "studio" ? h("button", { title: "Nouveau projet", onclick: () => void this.newProject() }, icon("plus"), "Projet") : null,
       h("div.spacer"),
       chips,
+      h("button.primary", { title: "Rendu complet en MP4 puis téléchargement", onclick: () => void this.exportVideo() }, icon("film"), "Exporter MP4"),
       themeBtn,
     );
     const viewport = document.getElementById("viewport")!;
@@ -685,7 +689,81 @@ export class StudioApp {
     }
   }
 
-  private async runJob(type: JobSummary["type"], options: Record<string, unknown>): Promise<void> {
+  /** Bouton « Exporter MP4 » : rendu complet puis téléchargement (serveur en local, navigateur sur la démo). */
+  async exportVideo(): Promise<void> {
+    if (!this.perf) {
+      this.toast("Préparez un projet avant d'exporter.", "warn");
+      return;
+    }
+    if (this.mode === "studio") {
+      const missing = (this.envItems ?? []).filter((i) => !i.ok && ["ffmpeg", "chrome"].includes(i.id));
+      if (missing.length) {
+        this.toast(`Rendu serveur indisponible (${missing.map((m) => m.label).join(", ")}) : export dans le navigateur.`, "warn", 6000);
+        await this.exportInBrowser();
+        return;
+      }
+      await this.runJob("render", { format: "mp4", srt: true, debut: 0, fin: this.perf.duration }, { download: true });
+      return;
+    }
+    await this.exportInBrowser();
+  }
+
+  /** Export MP4 dans le navigateur (WebCodecs), avec progression et annulation dans la barre du haut. */
+  async exportInBrowser(): Promise<void> {
+    if (!this.perf || !this.cfg) return;
+    if (!browserExportSupported()) {
+      this.toast("Ce navigateur ne prend pas en charge l'encodage vidéo (WebCodecs) : utilisez Chrome ou Edge.", "err", 8000);
+      return;
+    }
+    if (this.exportAbort) {
+      this.toast("Un export est déjà en cours.", "warn");
+      return;
+    }
+    this.pause();
+    const abort = new AbortController();
+    this.exportAbort = abort;
+    const progress = h("div.progress", { style: { width: "140px" } }, h("div", { style: { width: "0%" } }));
+    const label = h("span.chip", null, "export 0 %");
+    const cancel = h("button.small.danger", { onclick: () => abort.abort() }, "Annuler");
+    const box = h("div.row", { style: { margin: 0 } }, label, progress, cancel);
+    this.els.chips.appendChild(box);
+    const t0 = performance.now();
+    try {
+      const blob = await exportMp4({
+        cfg: this.cfg,
+        fps: this.perf.fps,
+        duration: this.perf.duration,
+        renderFrame: (t) => this.player.renderFrame(t),
+        captureCanvas: () => this.player.captureCanvas(),
+        audio: this.audioAnalysis ? { mono: this.audioAnalysis.mono, sampleRate: this.audioAnalysis.sampleRate } : undefined,
+        signal: abort.signal,
+        onWarning: (m) => this.toast(m, "warn", 8000),
+        onProgress: (done, total) => {
+          if (done % 5 === 0 || done === total) {
+            const pct = Math.round((done / total) * 100);
+            (progress.firstElementChild as HTMLElement).style.width = `${pct}%`;
+            const rate = done / ((performance.now() - t0) / 1000);
+            label.textContent = `export ${pct} % · ${rate.toFixed(0)} i/s · reste ~${Math.max(0, Math.round((total - done) / Math.max(0.1, rate)))} s`;
+          }
+        },
+      });
+      const name = `${this.current ?? "avatar"}.mp4`;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      this.toast(`${name} prêt (${fmtBytes(blob.size)})`, "ok", 8000);
+    } catch (e) {
+      this.toast((e as Error).message, abort.signal.aborted ? "warn" : "err", 8000);
+    } finally {
+      box.remove();
+      this.exportAbort = undefined;
+      this.lastFrame = -1;
+    }
+  }
+
+  private async runJob(type: JobSummary["type"], options: Record<string, unknown>, extra: { download?: boolean } = {}): Promise<void> {
     if (!this.current) return;
     if (this.busy) {
       this.toast("Un job est déjà en cours ; il sera exécuté à la suite.", "info");
@@ -720,6 +798,13 @@ export class StudioApp {
         else {
           const p = await api.project(this.current).catch(() => undefined);
           if (p) this.summary = p.summary;
+          const result = this.jobs.find((x) => x.id === job.id)?.result as { url?: string; output?: string } | undefined;
+          if (extra.download && result?.url) {
+            const a = document.createElement("a");
+            a.href = result.url;
+            a.download = `${this.current}${(result.output ?? "sortie.mp4").replace(/^.*(\.[a-z0-9]+)$/i, "$1")}`;
+            a.click();
+          }
         }
       } else this.toast(`${label} : ${status}${this.jobs.find((x) => x.id === job.id)?.error ? " — " + this.jobs.find((x) => x.id === job.id)!.error : ""}`, status === "annule" ? "warn" : "err", 10000);
       this.renderAll();
@@ -1123,8 +1208,15 @@ export class StudioApp {
   }
 
   private renderRendu(el: HTMLElement): void {
+    if (this.perf) {
+      el.append(h("h3", null, "Export dans le navigateur"));
+      el.append(
+        h("div.row", null, h("button.primary", { disabled: Boolean(this.exportAbort), onclick: () => void this.exportInBrowser() }, icon("film"), "Exporter en MP4 (navigateur)")),
+        h("p.hint", null, `Encodage H.264 et AAC par le navigateur (WebCodecs), sans installation : ${Math.ceil(this.perf.duration * this.perf.fps)} images, téléchargement automatique à la fin. Chrome ou Edge recommandés. Le rendu serveur ci-dessous reste la référence (ffmpeg, ProRes, transparence).`),
+      );
+    }
     if (this.mode === "demo") {
-      el.append(h("div.empty", null, "Le rendu vidéo se fait en local : ", h("code", null, "avatar studio"), " ou ", h("code", null, "avatar render <projet> --format mp4"), "."));
+      if (!this.perf) el.append(h("div.empty", null, "Déposez un audio dans l'onglet Projet pour pouvoir exporter."));
       return;
     }
     if (!this.perf || !this.current) {
