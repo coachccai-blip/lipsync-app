@@ -47,7 +47,7 @@ class Player {
       if (!this.puppet || this.puppetUrl !== payload.modelUrl) {
         this.puppet = await Puppet.load(payload.modelUrl!, cfg.scene.marionnette);
         this.puppetUrl = payload.modelUrl;
-      } else this.puppet.rebuild(cfg.scene.marionnette.feather);
+      } else this.puppet.rebuild(cfg.scene.marionnette.feather, cfg.scene.marionnette.seuilBruit ?? 0, cfg.scene.marionnette.lissage ?? 0);
       this.animator = createAnimator(perf, cfg);
       this.perf = perf;
       this.cfg = cfg;

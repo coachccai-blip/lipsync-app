@@ -47,7 +47,9 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
     error: (e) => (encodeError = e as Error),
   });
-  videoEncoder.configure({ ...video.config, bitrate: Math.round(width * height * fps * 0.12), latencyMode: "quality" });
+  // ~0,3 bit par pixel et par image (10 Mbit/s en 1080² à 30 i/s) : assez pour les dégradés
+  // et les aplats sans blocs visibles ; les encodeurs matériels sont peu efficaces en dessous
+  videoEncoder.configure({ ...video.config, bitrate: Math.max(6_000_000, Math.round(width * height * fps * 0.3)), bitrateMode: "variable", latencyMode: "quality" });
 
   // audio
   let audioEncoder: AudioEncoder | undefined;

@@ -58,6 +58,8 @@ export const SECTIONS: SectionSpec[] = [
       { path: "scene.marionnette.breathing", label: "Respiration", type: "range", min: 0, max: 0.03, step: 0.001 },
       { path: "scene.marionnette.mouthEnergy", label: "Étirement de la bouche (énergie)", type: "range", min: 0, max: 0.3, step: 0.01 },
       { path: "scene.marionnette.feather", label: "Adoucissement des bords (px)", type: "range", min: 0, max: 60, step: 1 },
+      { path: "scene.marionnette.seuilBruit", label: "Seuil de bruit entre images (0 = tout composer)", type: "range", min: 0, max: 80, step: 1 },
+      { path: "scene.marionnette.lissage", label: "Lissage du grain (px)", type: "range", min: 0, max: 3, step: 0.1 },
       { path: "scene.marionnette.mouthSharpness", label: "Netteté des transitions de bouche", type: "range", min: 1, max: 4, step: 0.1 },
       { path: "scene.marionnette.emotionThreshold", label: "Intensité minimale pour afficher une émotion", type: "range", min: 0, max: 1, step: 0.05 },
     ],

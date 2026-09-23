@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffRect, keyOut, unionRect } from "../src/puppet.js";
+import { changeMask, diffRect, groupMask, keyOut, unionRect } from "../src/puppet.js";
 
 function image(w: number, h: number, fill: [number, number, number]): Uint8ClampedArray {
   const d = new Uint8ClampedArray(w * h * 4);
@@ -64,5 +64,48 @@ describe("marionnette 2D : détection des zones", () => {
     expect(d[3]).toBe(0);
     expect(d[7]).toBe(255);
     expect(d[11]).toBeLessThan(80);
+  });
+});
+
+describe("marionnette 2D : masque de vrai changement", () => {
+  it("ignore le grain et garde la zone réellement modifiée, bords adoucis", () => {
+    const W = 200;
+    const H = 120;
+    const base = image(W, H, [200, 150, 120]);
+    const other = new Uint8ClampedArray(base);
+    // grain : ±6 niveaux partout, motif déterministe
+    for (let i = 0; i < other.length; i += 4) {
+      const n = ((i / 4) % 7) - 3;
+      other[i] += n;
+      other[i + 1] -= n;
+    }
+    // vraie bouche : rectangle sombre
+    paint(other, W, 80, 50, 120, 70, [60, 20, 20]);
+    const rect = { x: 0, y: 0, w: W, h: H };
+    const m = changeMask(other, base, W, rect, 20);
+    expect(m[10 * W + 10]).toBe(0); // grain seul : rien
+    expect(m[60 * W + 100]).toBeCloseTo(1, 5); // centre de la bouche : opaque
+    // bord : opaque encore quelques pixels après le trait (dilatation), puis fondu vers 0
+    expect(m[60 * W + 122]).toBeGreaterThan(0.93);
+    expect(m[60 * W + 138]).toBeGreaterThan(0.05);
+    expect(m[60 * W + 138]).toBeLessThan(0.9);
+    expect(m[60 * W + 165]).toBe(0);
+  });
+});
+
+describe("marionnette 2D : masque commun d'un groupe", () => {
+  it("couvre l'union des zones changées par toutes les images", () => {
+    const W = 200;
+    const H = 120;
+    const base = image(W, H, [200, 150, 120]);
+    const a = new Uint8ClampedArray(base);
+    paint(a, W, 20, 50, 50, 70, [60, 20, 20]);
+    const b = new Uint8ClampedArray(base);
+    paint(b, W, 150, 50, 180, 70, [60, 20, 20]);
+    const m = groupMask([a, b], base, W, { x: 0, y: 0, w: W, h: H }, 20);
+    expect(m[60 * W + 35]).toBeCloseTo(1, 5);
+    expect(m[60 * W + 165]).toBeCloseTo(1, 5);
+    expect(m[60 * W + 100]).toBe(0);
+    expect(m[10 * W + 10]).toBe(0);
   });
 });

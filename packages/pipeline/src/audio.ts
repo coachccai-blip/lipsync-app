@@ -78,17 +78,40 @@ export interface NormalizeOptions {
   sampleRate?: number;
 }
 
+const LOUDNORM_TARGET = "I=-16:TP=-1.5:LRA=11";
+
+/**
+ * Première passe loudnorm : mesure du programme. Renvoie les paramètres `measured_*` pour une
+ * normalisation linéaire (un seul gain, sans compression dynamique), ou undefined si la
+ * mesure est inexploitable (silence, fichier trop court).
+ */
+async function measureLoudness(ffmpeg: string, input: string): Promise<string | undefined> {
+  const r = await run(ffmpeg, ["-hide_banner", "-nostats", "-loglevel", "info", "-i", input, "-vn", "-af", `loudnorm=${LOUDNORM_TARGET}:print_format=json`, "-f", "null", "-"]).catch(() => undefined);
+  const m = r?.stderr.match(/\{[^{}]*"input_i"[^{}]*\}/);
+  if (!m) return undefined;
+  try {
+    const j = JSON.parse(m[0]) as Record<string, string>;
+    const vals = [j.input_i, j.input_lra, j.input_tp, j.input_thresh, j.target_offset].map(Number);
+    if (vals.some((v) => !Number.isFinite(v)) || vals[0] < -70) return undefined;
+    return `measured_I=${vals[0]}:measured_LRA=${vals[1]}:measured_TP=${vals[2]}:measured_thresh=${vals[3]}:offset=${vals[4]}:linear=true`;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Convertit n'importe quelle entrée en WAV mono 48 kHz 16 bits, volume normalisé
- * (loudnorm), avec un silence de repos avant et après.
+ * (loudnorm en deux passes, gain linéaire : pas de pompage ni de distorsion), avec un
+ * silence de repos avant et après.
  */
 export async function normalizeAudio(input: string, output: string, options: NormalizeOptions = {}): Promise<void> {
   const ffmpeg = resolveTool("ffmpeg");
   const sr = options.sampleRate ?? 48000;
   const before = options.padBefore ?? 0;
   const after = options.padAfter ?? 0;
+  const measured = await measureLoudness(ffmpeg, input);
   const filters = [
-    "loudnorm=I=-16:TP=-1.5:LRA=11",
+    measured ? `loudnorm=${LOUDNORM_TARGET}:${measured}` : `loudnorm=${LOUDNORM_TARGET}`,
     `aformat=sample_fmts=s16:channel_layouts=mono:sample_rates=${sr}`,
     before > 0 ? `adelay=${Math.round(before * 1000)}:all=1` : null,
     after > 0 ? `apad=pad_dur=${after}` : null,

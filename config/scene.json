@@ -127,6 +127,8 @@
     "feather": 18,
     "mouthEnergy": 0.08,
     "emotionThreshold": 0.3,
-    "mouthSharpness": 2
+    "mouthSharpness": 2,
+    "seuilBruit": 20,
+    "lissage": 0.6
   }
 }

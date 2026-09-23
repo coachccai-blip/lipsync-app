@@ -188,13 +188,23 @@ Variables d'environnement : `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `AZURE_TT
 
 ## 5. Comment ça marche
 
-1. **Normalisation** : WAV mono 48 kHz 16 bits, `loudnorm`, silence de repos avant et après (`scene.padding`). Ce WAV est la référence unique pour Rhubarb, Whisper, l'énergie et le mixage.
+1. **Normalisation** : WAV mono 48 kHz 16 bits, `loudnorm` en deux passes (mesure puis gain linéaire : pas de pompage ni de distorsion), silence de repos avant et après (`scene.padding`). Ce WAV est la référence unique pour Rhubarb, Whisper, l'énergie et le mixage.
 2. **Transcription** : whisper.cpp, langue `fr`, un mot par segment. Mode B : alignement de séquences (LCS tolérant) entre les mots du script et ceux de Whisper, interpolation des mots sans correspondance.
 3. **Lip sync** : `rhubarb -f json --recognizer phonetic --extendedShapes GHX`.
 4. **Énergie** : enveloppe RMS (fenêtres de 20 ms), normalisée, rééchantillonnée à la cadence vidéo ; pics d'accent.
 5. **Annotation** : API Anthropic, sortie JSON structurée validée par schéma, vocabulaire fermé, une nouvelle tentative puis repli. Sans clé ou avec `--sans-llm`, un générateur procédural couvre toute la durée : phrases (mots ou silences), énergie moyenne, densité d'accents et ponctuation choisissent l'émotion ; un geste toutes les 4 à 6 secondes sur les accents, choisi selon l'émotion.
 6. **Animation** (identique en prévisualisation et en rendu) : bouche (transitions adoucies, anticipation, énergie, exagération, priorité sur les expressions) + expressions (fondu 400 ms, atténuation zone bouche) + vie procédurale (clignements, saccades, respiration, micro-mouvements, sourcils sur accents, tout aléatoire issu de `seed`) + gestes (clips mélangés via `AnimationMixer` piloté par `t`, ou repli procédural).
 7. **Rendu** : Chrome headless (ANGLE ; SwiftShader en repli avec avertissement), `renderFrame(t)` pour `t = n / fps`, capture PNG → ffmpeg sur stdin. Aucun `requestAnimationFrame`, `Date.now` ou `performance.now` dans le chemin de rendu.
+
+### Une image propre, sans grésillement
+
+Les images d'une marionnette générées par IA portent chacune un **grain différent**. Si l'on composait la zone entière de chaque bouche ou de chaque émotion, ce grain changerait à chaque forme de bouche (dix fois par seconde) : c'est le grésillement que l'on voit autour de la bouche et des yeux. Le compositeur ne colle donc que le **vrai changement** :
+
+- `marionnette.seuilBruit` (défaut 20) : sous ce seuil, une différence entre une image et la base est considérée comme du grain et ignorée. Le masque retenu est l'union des zones que toutes les bouches (ou tous les yeux) modifient, dilatée puis fondue sur une vingtaine de pixels : la bouche au repos disparaît bien sous une bouche ouverte, sans bord visible. 0 = ancien comportement (zone entière).
+- `marionnette.lissage` (défaut 0,6 px) : léger lissage du grain des images sources, invisible à la résolution de sortie.
+- Le canvas de la marionnette est mis à l'échelle en qualité haute (mipmaps), ce qui évite le fourmillement des détails fins pendant les micro-mouvements de tête.
+
+Côté encodage, le rendu serveur utilise x264 `crf 16`, `preset slow`, AAC 192 kbit/s ; l'export navigateur vise 0,3 bit par pixel et par image (10 Mbit/s en 1080² à 30 i/s). Si le grésillement persiste sur une plateforme de diffusion, c'est sa recompression : livrer un fichier plus lourd (ProRes 4444 via `--format prores4444`) ou monter le `crf` à 14 dans `packages/renderer/src/ffmpeg.ts`. Pour l'incrustation, gardez à l'esprit que le MP4 est en 4:2:0 : le bord de la bulle sur le fond vert peut montrer un liseré au keying ; préférez alors ProRes 4444 ou WebM alpha, qui portent une vraie couche alpha.
 
 ---
 

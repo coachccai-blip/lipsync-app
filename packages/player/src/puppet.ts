@@ -123,8 +123,104 @@ function padRect(r: Rect, pad: number, w: number, h: number): Rect {
   return { x, y, w: Math.min(w - x, r.w + 2 * pad), h: Math.min(h - y, r.h + 2 * pad) };
 }
 
-/** Découpe une zone d'une image en calque aux bords adoucis. */
-function makeLayer(img: ImageData, rect: Rect, feather: number): Layer {
+/** Flou boîte séparable (deux passes = quasi gaussien) sur un champ scalaire. */
+function boxBlur(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  if (r <= 0) return src;
+  const tmp = new Float32Array(w * h);
+  const out = new Float32Array(w * h);
+  const n = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    let acc = 0;
+    const row = y * w;
+    for (let x = -r; x <= r; x++) acc += src[row + Math.min(w - 1, Math.max(0, x))];
+    for (let x = 0; x < w; x++) {
+      tmp[row + x] = acc / n;
+      acc += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let acc = 0;
+    for (let y = -r; y <= r; y++) acc += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = acc / n;
+      acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+    }
+  }
+  return out;
+}
+
+/** Dilatation (filtre max) séparable. */
+function dilate(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  if (r <= 0) return src;
+  const tmp = new Float32Array(w * h);
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let m = 0;
+      for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r); k++) m = Math.max(m, src[y * w + k]);
+      tmp[y * w + x] = m;
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let m = 0;
+      for (let k = Math.max(0, y - r); k <= Math.min(h - 1, y + r); k++) m = Math.max(m, tmp[k * w + x]);
+      out[y * w + x] = m;
+    }
+  }
+  return out;
+}
+
+/**
+ * Noyau de « vrai changement » entre une image et la base dans un rectangle : 1 là où la
+ * différence (lissée) dépasse le seuil, 0 ailleurs (le grain propre à chaque image reste sous
+ * le seuil).
+ */
+export function changeCore(img: Uint8ClampedArray, base: Uint8ClampedArray, width: number, rect: Rect, gate: number): Float32Array {
+  const { w, h } = rect;
+  const mag = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = ((rect.y + y) * width + rect.x + x) * 4;
+      mag[y * w + x] = Math.max(Math.abs(img[i] - base[i]), Math.abs(img[i + 1] - base[i + 1]), Math.abs(img[i + 2] - base[i + 2]));
+    }
+  }
+  const core = boxBlur(mag, w, h, 2);
+  for (let i = 0; i < core.length; i++) core[i] = core[i] >= gate ? 1 : 0;
+  return core;
+}
+
+/** Masque final à partir d'un noyau : dilaté de quelques pixels puis adouci. */
+export function softenCore(core: Float32Array, w: number, h: number): Float32Array {
+  // dilatation large puis fondu long : une différence de teinte entre deux images ne dessine
+  // jamais de bord visible, et le contour anti-aliasé du vrai changement reste opaque
+  return boxBlur(boxBlur(dilate(core, w, h, 12), w, h, 8), w, h, 8);
+}
+
+/** Masque de vrai changement d'une seule image (noyau adouci). */
+export function changeMask(img: Uint8ClampedArray, base: Uint8ClampedArray, width: number, rect: Rect, gate: number): Float32Array {
+  return softenCore(changeCore(img, base, width, rect, gate), rect.w, rect.h);
+}
+
+/**
+ * Masque commun à un groupe d'images (toutes les bouches, ou tous les yeux) : union des
+ * noyaux, pour que chaque calque recouvre aussi ce que les autres images changent (la bouche
+ * au repos de la base doit disparaître sous n'importe quelle bouche ouverte).
+ */
+export function groupMask(images: Uint8ClampedArray[], base: Uint8ClampedArray, width: number, rect: Rect, gate: number): Float32Array {
+  const union = new Float32Array(rect.w * rect.h);
+  for (const img of images) {
+    const core = changeCore(img, base, width, rect, gate);
+    for (let i = 0; i < union.length; i++) if (core[i] > 0) union[i] = 1;
+  }
+  return softenCore(union, rect.w, rect.h);
+}
+
+/**
+ * Découpe une zone d'une image en calque aux bords adoucis. Avec un masque de changement,
+ * seule la zone réellement modifiée reste opaque (le grain de l'image est ignoré).
+ */
+function makeLayer(img: ImageData, rect: Rect, feather: number, change?: Float32Array, smoothing = 0): Layer {
   const c = document.createElement("canvas");
   c.width = rect.w;
   c.height = rect.h;
@@ -133,16 +229,18 @@ function makeLayer(img: ImageData, rect: Rect, feather: number): Layer {
   src.width = img.width;
   src.height = img.height;
   src.getContext("2d")!.putImageData(img, 0, 0);
+  if (smoothing > 0) ctx.filter = `blur(${smoothing}px)`;
   ctx.drawImage(src, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
-  if (feather > 0) {
+  ctx.filter = "none";
+  if (feather > 0 || change) {
     const mask = ctx.createImageData(rect.w, rect.h);
     const m = mask.data;
     for (let y = 0; y < rect.h; y++) {
       for (let x = 0; x < rect.w; x++) {
         const dEdge = Math.min(x + 1, y + 1, rect.w - x, rect.h - y);
-        const a = Math.min(1, dEdge / feather);
-        const i = (y * rect.w + x) * 4;
-        m[i + 3] = Math.round(255 * smoothstep(a));
+        const edge = feather > 0 ? smoothstep(Math.min(1, dEdge / feather)) : 1;
+        const k = y * rect.w + x;
+        m[k * 4 + 3] = Math.round(255 * edge * (change ? Math.min(1, change[k]) : 1));
       }
     }
     const maskCanvas = document.createElement("canvas");
@@ -171,6 +269,7 @@ export class Puppet {
   report!: LoadReport;
   private images = new Map<string, ImageData>();
   private feather = 0;
+  private buildKey = "";
 
   static async load(manifestUrl: string, cfg: MarionnetteConfig): Promise<Puppet> {
     const res = await fetch(manifestUrl, { cache: "no-store" });
@@ -234,7 +333,7 @@ export class Puppet {
       const tol = manifest.keyTolerance ?? 0.12;
       for (const d of p.images.values()) keyOut(d, key, tol);
     }
-    p.rebuild(cfg.feather);
+    p.rebuild(cfg.feather, cfg.seuilBruit ?? 0, cfg.lissage ?? 0);
     p.report = {
       kind: "marionnette",
       model: manifestUrl,
@@ -264,25 +363,41 @@ export class Puppet {
     return p;
   }
 
-  /** (Re)construit les calques découpés avec l'adoucissement demandé. */
-  rebuild(feather: number): void {
-    if (feather === this.feather && this.base) return;
+  /** (Re)construit les calques découpés : adoucissement des bords, seuil de bruit, lissage du grain. */
+  rebuild(feather: number, gate = 0, smoothing = 0): void {
+    const key = `${feather}|${gate}|${smoothing}`;
+    if (key === this.buildKey && this.base) return;
+    this.buildKey = key;
     this.feather = feather;
     const baseData = this.images.get("base")!;
     this.base = document.createElement("canvas");
     this.base.width = this.width;
     this.base.height = this.height;
-    this.base.getContext("2d")!.putImageData(baseData, 0, 0);
+    if (smoothing > 0) {
+      const raw = document.createElement("canvas");
+      raw.width = this.width;
+      raw.height = this.height;
+      raw.getContext("2d")!.putImageData(baseData, 0, 0);
+      const bctx = this.base.getContext("2d")!;
+      bctx.filter = `blur(${smoothing}px)`;
+      bctx.drawImage(raw, 0, 0);
+      bctx.filter = "none";
+    } else this.base.getContext("2d")!.putImageData(baseData, 0, 0);
     const mouthRect = padRect(this.regions.mouth, Math.round(feather), this.width, this.height);
     const eyesRect = padRect(this.regions.eyes, Math.round(feather), this.width, this.height);
     this.mouths.clear();
     this.emotions.clear();
     this.eyes = {};
-    for (const [k, d] of this.images) {
-      if (k.startsWith("mouth:")) this.mouths.set(k.slice(6), makeLayer(d, mouthRect, feather));
-      else if (k === "eyes:half") this.eyes.half = makeLayer(d, eyesRect, feather);
-      else if (k === "eyes:closed") this.eyes.closed = makeLayer(d, eyesRect, feather);
-      else if (k.startsWith("emotion:")) this.emotions.set(k.slice(8), makeLayer(d, eyesRect, feather));
+    const entries = [...this.images].filter(([k]) => k !== "base");
+    const mouthImages = entries.filter(([k]) => k.startsWith("mouth:")).map(([, d]) => d.data);
+    const eyeImages = entries.filter(([k]) => k.startsWith("eyes:") || k.startsWith("emotion:")).map(([, d]) => d.data);
+    const mouthMask = gate > 0 ? groupMask(mouthImages, baseData.data, this.width, mouthRect, gate) : undefined;
+    const eyesMask = gate > 0 ? groupMask(eyeImages, baseData.data, this.width, eyesRect, gate) : undefined;
+    for (const [k, d] of entries) {
+      if (k.startsWith("mouth:")) this.mouths.set(k.slice(6), makeLayer(d, mouthRect, feather, mouthMask, smoothing));
+      else if (k === "eyes:half") this.eyes.half = makeLayer(d, eyesRect, feather, eyesMask, smoothing);
+      else if (k === "eyes:closed") this.eyes.closed = makeLayer(d, eyesRect, feather, eyesMask, smoothing);
+      else if (k.startsWith("emotion:")) this.emotions.set(k.slice(8), makeLayer(d, eyesRect, feather, eyesMask, smoothing));
     }
   }
 
@@ -365,6 +480,7 @@ export class PuppetStage {
     this.cfg = cfg;
     this.canvas = document.createElement("canvas");
     this.ctx = this.canvas.getContext("2d")!;
+    this.ctx.imageSmoothingQuality = "high";
     const bubble = document.getElementById("bubble")!;
     bubble.insertBefore(this.canvas, document.getElementById("ring"));
     this.applyConfig(cfg, background);
@@ -376,6 +492,7 @@ export class PuppetStage {
     if (this.canvas.width !== this.diameter) {
       this.canvas.width = this.diameter;
       this.canvas.height = this.diameter;
+      this.ctx.imageSmoothingQuality = "high"; // le redimensionnement réinitialise le contexte
     }
   }
 

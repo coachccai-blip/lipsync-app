@@ -222,6 +222,14 @@ export interface MarionnetteConfig {
   mouthEnergy: number;
   /** Intensité minimale d'un segment d'émotion pour afficher son image (les images ne se dosent pas). */
   emotionThreshold: number;
+  /**
+   * Seuil de bruit (niveaux 0-255) : sous ce seuil, une différence entre une image et la base
+   * est traitée comme du grain et ignorée, pour que seul le vrai changement (bouche, yeux)
+   * soit composé. 0 désactive le filtrage.
+   */
+  seuilBruit?: number;
+  /** Lissage du grain des images, en pixels de l'image source (0 = aucun). */
+  lissage?: number;
   /** Netteté des transitions de bouche (1 = fondu linéaire, 3 = quasi-bascule). */
   mouthSharpness: number;
 }
