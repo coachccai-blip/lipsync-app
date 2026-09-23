@@ -6,7 +6,7 @@ import { FORMAT_PRESETS, SECTIONS, buildControls } from "./controls.js";
 import { clear, download, fmtBytes, fmtTime, h, icon } from "./dom.js";
 import { EMOTION_COLORS, Timeline } from "./timeline.js";
 import { analyzeAudio, type AudioAnalysis } from "./audio.js";
-import { autoTracks } from "@avatar/shared";
+import { analyzeEnergy, approximateLipsync, autoTracks } from "@avatar/shared";
 import { PoseEditor } from "./poses.js";
 
 export interface PlayerLike {
@@ -326,6 +326,10 @@ export class StudioApp {
   }
 
   private loadAudioAnalysis(url?: string): void {
+    if (url && this.audioAnalysis && this.audioAnalysisUrl === url) {
+      this.timeline.setAudio(this.audioAnalysis);
+      return;
+    }
     this.audioAnalysis = undefined;
     this.timeline.setAudio(undefined);
     if (!url) return;
@@ -574,6 +578,38 @@ export class StudioApp {
     });
   }
 
+  /**
+   * Performance construite dans le navigateur à partir d'un audio : durée réelle, lip sync
+   * approximatif (énergie et spectre), énergie, accents, émotions et gestes procéduraux.
+   */
+  private async performanceFromAudio(url: string, cfg: AllConfig): Promise<Performance> {
+    const a = await analyzeAudio(url);
+    this.audioAnalysis = a;
+    this.audioAnalysisUrl = url;
+    const fps = cfg.scene.fps;
+    const visemes = approximateLipsync(a.mono, a.sampleRate);
+    const energy = analyzeEnergy(a.mono, a.sampleRate, { rate: fps });
+    const perf: Performance = {
+      version: 1,
+      fps,
+      duration: Math.round(a.duration * 1000) / 1000,
+      audio: url.split("/").pop() ?? "audio",
+      text: "",
+      words: [],
+      visemes,
+      energy: energy.energy,
+      accents: energy.accents,
+      expressions: [],
+      gestures: [],
+      seed: 12345,
+    };
+    const vocab = { emotions: Object.keys(cfg.emotions.emotions), gestures: Object.keys(cfg.gestures.procedural) };
+    const auto = autoTracks(perf, vocab);
+    perf.expressions = auto.expressions;
+    perf.gestures = auto.gestures;
+    return perf;
+  }
+
   /** Remplace les pistes automatiques par une génération procédurale couvrant toute la durée. */
   private generateTracks(): void {
     if (!this.perf || !this.cfg) return;
@@ -816,15 +852,20 @@ export class StudioApp {
     el.append(h("h3", null, "Préparation"));
     const sansLlm = h("input", { type: "checkbox" });
     const force = h("input", { type: "checkbox" });
+    const missingTools = (this.envItems ?? []).some((i) => !i.ok && ["rhubarb", "whisper", "whisper-model"].includes(i.id));
+    const rapide = h("input", { type: "checkbox", checked: missingTools });
     el.append(
-      h("div.stack", null, h("label", null, sansLlm, " sans annotation LLM (expressions et gestes procéduraux + balises)"), h("label", null, force, " ignorer le cache et tout recalculer")),
+      h("div.stack", null,
+        h("label", { title: "Sans Whisper ni Rhubarb : bouche pilotée par l'énergie et le spectre de la voix, pas de mots ; ffmpeg suffit" }, rapide, " préparation rapide (lip sync approximatif, sans Rhubarb ni Whisper)"),
+        h("label", null, sansLlm, " sans annotation LLM (expressions et gestes procéduraux + balises)"),
+        h("label", null, force, " ignorer le cache et tout recalculer")),
       h(
         "div.row",
         null,
-        h("button.primary", { disabled: !this.prepareInput || this.busy, onclick: () => this.prepareInput && void this.runJob("prepare", { ...this.prepareInput, sansLlm: sansLlm.checked, force: force.checked }) }, icon("play"), this.perf ? "Préparer à nouveau" : "Préparer"),
+        h("button.primary", { disabled: !this.prepareInput || this.busy, onclick: () => this.prepareInput && void this.runJob("prepare", { ...this.prepareInput, sansLlm: sansLlm.checked || rapide.checked, rapide: rapide.checked, force: force.checked }) }, icon("play"), this.perf ? "Préparer à nouveau" : "Préparer"),
         this.prepareInput ? h("span.meta", { style: { color: "var(--muted)" } }, `→ ${this.prepareInput.file}`) : null,
       ),
-      h("p.hint", null, "Normalisation, transcription Whisper, Rhubarb, énergie, annotation. Les étapes inchangées sont lues depuis le cache."),
+      h("p.hint", null, "Normalisation, transcription Whisper, Rhubarb, énergie, annotation. Les étapes inchangées sont lues depuis le cache. En préparation rapide, le lip sync est approximatif : préférez Rhubarb pour la version finale."),
     );
 
     if (this.perf && s?.meta?.mode === "audio") {
@@ -892,6 +933,16 @@ export class StudioApp {
         } else if (/\.(wav|mp3|m4a|ogg|flac)$/.test(n)) payload.audioUrl = URL.createObjectURL(f);
       }
       if (perf) payload.performance = perf;
+      else if (payload.audioUrl && payload.audioUrl !== this.audioUrl) {
+        // audio seul : performance complète sur toute sa durée (lip sync approximatif, pistes procédurales)
+        this.toast("Analyse de l'audio et lip sync approximatif…", "info", 4000);
+        try {
+          payload.performance = await this.performanceFromAudio(payload.audioUrl, payload.config);
+        } catch (e) {
+          this.toast(`Audio illisible : ${(e as Error).message}`, "err");
+          return;
+        }
+      }
       await this.setPayload(payload, "Démo");
       this.renderAll();
     };
@@ -977,7 +1028,12 @@ export class StudioApp {
       this.renderPanel("pistes");
     } }, icon("plus", 14), "Ajouter à la tête de lecture");
     const emoList = h("div.list");
-    perf.expressions.forEach((e, i) => {
+    const LIST_MAX = 120;
+    const near = (a: number) => Math.abs(a - this.t);
+    const emoIdx = perf.expressions.map((e, i) => i).sort((a, b) => near(perf.expressions[a].start) - near(perf.expressions[b].start)).slice(0, LIST_MAX).sort((a, b) => a - b);
+    if (perf.expressions.length > LIST_MAX) emoList.appendChild(h("p.hint", null, `${LIST_MAX} segments les plus proches de la tête de lecture sur ${perf.expressions.length} ; tout est dans la timeline.`));
+    emoIdx.forEach((i) => {
+      const e = perf.expressions[i];
       const selected = sel?.kind === "expression" && sel.index === i;
       emoList.appendChild(h("div.item", { className: `item${selected ? " selected" : ""}`, onclick: () => { this.timeline.select({ kind: "expression", index: i }); this.seekTo(e.start); this.renderPanel("pistes"); } },
         h("span.sw", { style: { background: EMOTION_COLORS[Math.max(0, emotions.indexOf(e.emotion)) % EMOTION_COLORS.length] } }),
@@ -996,7 +1052,10 @@ export class StudioApp {
       this.renderPanel("pistes");
     } }, icon("plus", 14), "Ajouter à la tête de lecture");
     const gList = h("div.list");
-    perf.gestures.forEach((g, i) => {
+    const gIdx = perf.gestures.map((g, i) => i).sort((a, b) => near(perf.gestures[a].at) - near(perf.gestures[b].at)).slice(0, LIST_MAX).sort((a, b) => a - b);
+    if (perf.gestures.length > LIST_MAX) gList.appendChild(h("p.hint", null, `${LIST_MAX} gestes les plus proches de la tête de lecture sur ${perf.gestures.length}.`));
+    gIdx.forEach((i) => {
+      const g = perf.gestures[i];
       const selected = sel?.kind === "gesture" && sel.index === i;
       gList.appendChild(h("div.item", { className: `item${selected ? " selected" : ""}`, onclick: () => { this.timeline.select({ kind: "gesture", index: i }); this.seekTo(g.at); this.renderPanel("pistes"); } },
         h("span.sw", { style: { background: g.source === "balise" ? "#ffcc66" : g.source === "manuel" ? "#b8f0c4" : "#7cc4ff" } }),

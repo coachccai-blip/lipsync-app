@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { autoTracks, type AllConfig, type ExpressionSegment, type GestureEvent, type Performance, type VisemeCue, type Word } from "@avatar/shared";
+import { approximateLipsync, autoTracks, type AllConfig, type ExpressionSegment, type GestureEvent, type Performance, type VisemeCue, type Word } from "@avatar/shared";
 import { audioDuration, normalizeAudio, pcmToWav, readWav } from "./audio.js";
 import { cachedStep, hashInputs } from "./cache.js";
 import { configVocab, loadConfig } from "./config.js";
@@ -35,6 +35,11 @@ export interface PrepareOptions {
   root?: string;
   /** Annulation (vérifiée entre les étapes ; l'étape en cours va à son terme). */
   signal?: AbortSignal;
+  /**
+   * Préparation rapide : ni Whisper ni Rhubarb. Lip sync approximatif calculé depuis
+   * l'audio (énergie et centre spectral), pas de mots ; ffmpeg reste nécessaire.
+   */
+  rapide?: boolean;
 }
 
 export interface PrepareResult {
@@ -147,16 +152,23 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
   checkAbort();
   // ---- 3. Transcription (Whisper) ----
   const transcriber = options.transcriber ?? new WhisperCppTranscriber();
-  log.step(`Transcription et horodatage des mots (${transcriber.name})`);
-  const { result: asr } = await cachedStep<Transcription>(
-    projectDir,
-    "transcribe",
-    hashInputs([{ file: audioWav }, { text: transcriber.name }, { text: language }]),
-    [],
-    () => transcriber.transcribe(audioWav, { language, workDir: path.join(projectDir, "cache") }),
-    { force },
-  );
-  log.info(`${asr.words.length} mots reconnus`);
+  let asr: Transcription = { text: "", words: [] };
+  if (options.rapide) {
+    log.step("Préparation rapide : pas de transcription (aucun mot), lip sync approximatif");
+  } else {
+    log.step(`Transcription et horodatage des mots (${transcriber.name})`);
+    asr = (
+      await cachedStep<Transcription>(
+        projectDir,
+        "transcribe",
+        hashInputs([{ file: audioWav }, { text: transcriber.name }, { text: language }]),
+        [],
+        () => transcriber.transcribe(audioWav, { language, workDir: path.join(projectDir, "cache") }),
+        { force },
+      )
+    ).result;
+    log.info(`${asr.words.length} mots reconnus`);
+  }
 
   checkAbort();
   // ---- 4. Texte de référence et alignement ----
@@ -164,7 +176,15 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
   let text: string;
   const transcriptFile = path.join(projectDir, PROJECT_FILES.transcript);
   const generatedFile = path.join(projectDir, "cache", "transcript.generated.txt");
-  if (mode === "audio") {
+  if (options.rapide) {
+    words = mode === "texte" ? tokenize(scriptText!).map((w) => ({ w, start: 0, end: 0 })) : [];
+    text = mode === "texte" ? scriptText! : "";
+    if (mode === "texte") {
+      // sans horodatage : mots répartis uniformément sur la parole (approximation)
+      const span = Math.max(0.1, duration - padding.before - padding.after);
+      words = words.map((w, i) => ({ w: w.w, start: round3(padding.before + (span * i) / words.length), end: round3(padding.before + (span * (i + 1)) / words.length) }));
+    }
+  } else if (mode === "audio") {
     const generated = asr.text;
     const previousGenerated = existsSync(generatedFile) ? readFileSync(generatedFile, "utf8") : undefined;
     writeFileSync(generatedFile, generated);
@@ -197,18 +217,22 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
   checkAbort();
   // ---- 5. Lip sync (Rhubarb) ----
   const visemesFile = path.join(projectDir, PROJECT_FILES.visemes);
-  log.step("Lip sync (Rhubarb, reconnaisseur phonétique)");
-  const { result: visemes } = await cachedStep<VisemeCue[]>(projectDir, "rhubarb", hashInputs([{ file: audioWav }]), [visemesFile], async () => {
-    const cues = await (options.lipsync ?? runRhubarb)(audioWav, visemesFile);
-    return cues;
+  log.step(options.rapide ? "Lip sync approximatif (énergie et spectre)" : "Lip sync (Rhubarb, reconnaisseur phonétique)");
+  const wavData = readWav(audioWav);
+  const { result: visemes } = await cachedStep<VisemeCue[]>(projectDir, options.rapide ? "lipsync-approx" : "rhubarb", hashInputs([{ file: audioWav }]), [visemesFile], async () => {
+    if (options.rapide) {
+      const cues = approximateLipsync(wavData.samples, wavData.sampleRate);
+      writeFileSync(visemesFile, JSON.stringify({ metadata: { approximatif: true }, mouthCues: cues.map((c) => ({ start: c.start, end: c.end, value: c.shape })) }));
+      return cues;
+    }
+    return (options.lipsync ?? runRhubarb)(audioWav, visemesFile);
   }, { force });
   log.info(`${visemes.length} visèmes`);
 
   checkAbort();
   // ---- 6. Énergie ----
   log.step("Analyse d'énergie");
-  const wav = readWav(audioWav);
-  const energy = analyzeEnergy(wav.samples, wav.sampleRate, { rate: fps });
+  const energy = analyzeEnergy(wavData.samples, wavData.sampleRate, { rate: fps });
   log.info(`${energy.accents.length} accents détectés`);
 
   checkAbort();

@@ -95,6 +95,7 @@ Les fichiers restent la source de vérité : modifier `performance.json` ou `con
 | `avatar prepare --texte X --out DIR` | mode B : balises → Azure TTS → normalisation → Whisper → réalignement script ↔ Whisper → … |
 | `avatar prepare … --sans-llm` | pas d'appel Anthropic : expressions et gestes issus des balises et du procédural |
 | `avatar prepare … --force` | ignore le cache |
+| `avatar prepare … --rapide` | préparation rapide sans Whisper ni Rhubarb (ffmpeg suffit) : lip sync approximatif calculé depuis l'audio (énergie et spectre), pas de mots, émotions et gestes procéduraux ; convient pour dégrossir, préférer Rhubarb pour la version finale |
 | `avatar preview DIR [--port 4242] [--transparent]` | ouvre le studio directement sur un projet |
 | `avatar render DIR --format mp4\|prores4444\|webm-alpha [--debut s] [--fin s] [--out f] [--frames dir] [--brouillon] [--srt]` | rendu déterministe avec barre de progression ; `--brouillon` = demi-résolution rapide, `--srt` = sous-titres à côté de la vidéo |
 | `avatar planche DIR [--emotions] [--os "rightArm=0,0,-100;rightForeArm=-90,0,0\|head=0,30,0"]` | planche de contrôle PNG : pose de repos, chaque geste procédural à mi-parcours, chaque émotion, ou des rotations d'os à tester ; sert à régler `config/gestures.json` à l'œil |
@@ -240,4 +241,5 @@ Limites et points de vigilance :
 - **Voix DragonHD** : la température est passée en SSML par l'attribut `parameters="temperature=…"` de `<voice>`, conformément à la documentation Microsoft des voix HD ; le SSML reste minimal (`<speak>`, `<voice>`). Si Azure renvoie une erreur 400, vérifiez la documentation en vigueur.
 - **Rendu logiciel** : sans GPU, Chrome utilise SwiftShader (environ 2 à 3 images/s en 1080 × 1080). Le résultat est identique, seulement plus lent.
 - **Formats GLB** : Meshopt est pris en charge ; Draco et KTX2 ne le sont pas (ré-exportez sans compression).
+- **Vidéos longues** : la chaîne est prévue pour des fichiers de 30 minutes et plus (timeline, analyse audio adaptative, préparation rapide d'un fichier de 20 minutes en une trentaine de secondes). Le rendu, lui, prend du temps : comptez la durée de la vidéo multipliée par 30 divisée par la cadence de rendu (2 à 30 images par seconde selon la machine), et utilisez `--brouillon` pour valider avant le rendu final.
 - **Vérification audio/vidéo** sur une vidéo longue : rendez `avatar test-project projets/long --duree 180` puis `render` et contrôlez le bip de chaque seconde en fin de fichier.

@@ -105,14 +105,16 @@ export class Timeline {
 
   fit(): void {
     const D = Math.max(0.001, this.perf?.duration ?? 1);
-    this.pxPerSec = Math.max(4, (this.canvas.clientWidth - HEAD - 8) / D);
+    this.pxPerSec = Math.max(0.05, (this.canvas.clientWidth - HEAD - 8) / D);
     this.scroll = 0;
     this.draw();
   }
 
   zoom(factor: number, aroundT = this.t): void {
     const before = this.x(aroundT) - HEAD;
-    this.pxPerSec = Math.min(4000, Math.max(4, this.pxPerSec * factor));
+    const D = Math.max(0.001, this.perf?.duration ?? 1);
+    const minPx = Math.min(4, (this.canvas.clientWidth - HEAD - 8) / D);
+    this.pxPerSec = Math.min(4000, Math.max(minPx, this.pxPerSec * factor));
     this.scroll = Math.max(0, aroundT - before / this.pxPerSec);
     this.draw();
   }
@@ -521,8 +523,8 @@ export class Timeline {
 
 function niceStep(pxPerSec: number): number {
   const target = 80 / pxPerSec;
-  const steps = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60];
-  return steps.find((s) => s >= target) ?? 60;
+  const steps = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600];
+  return steps.find((s) => s >= target) ?? 600;
 }
 
 function fmtRuler(t: number, step: number): string {

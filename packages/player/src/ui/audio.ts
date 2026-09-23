@@ -1,3 +1,5 @@
+import { fft } from "@avatar/shared";
+
 /**
  * Analyse audio côté navigateur pour la timeline : forme d'onde (crêtes par tranche de 2 ms)
  * et spectrogramme (STFT, fenêtre de Hann, échelle de fréquence logarithmique).
@@ -5,6 +7,8 @@
 export interface AudioAnalysis {
   duration: number;
   sampleRate: number;
+  /** Échantillons mono (pour le lip sync approximatif et l'énergie). */
+  mono: Float32Array;
   /** Crêtes min/max par tranche de `bucketSec`. */
   peaks: { min: Float32Array; max: Float32Array; bucketSec: number };
   /** Image du spectrogramme : une colonne par trame, une ligne par bande (graves en bas). */
@@ -49,45 +53,15 @@ export async function analyzeAudio(url: string): Promise<AudioAnalysis> {
     min[b] = lo;
     max[b] = hi;
   }
-  return { duration: decoded.duration, sampleRate: sr, peaks: { min, max, bucketSec: bucket / sr }, spectrogram: spectrogram(mono, sr) };
+  return { duration: decoded.duration, sampleRate: sr, mono, peaks: { min, max, bucketSec: bucket / sr }, spectrogram: spectrogram(mono, sr) };
 }
 
-/** FFT radix-2 en place (re, im). */
-function fft(re: Float32Array, im: Float32Array): void {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      [re[i], re[j]] = [re[j], re[i]];
-      [im[i], im[j]] = [im[j], im[i]];
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = (-2 * Math.PI) / len;
-    const wr = Math.cos(ang);
-    const wi = Math.sin(ang);
-    for (let i = 0; i < n; i += len) {
-      let cr = 1;
-      let ci = 0;
-      for (let k = 0; k < len / 2; k++) {
-        const ar = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci;
-        const ai = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
-        re[i + k + len / 2] = re[i + k] - ar;
-        im[i + k + len / 2] = im[i + k] - ai;
-        re[i + k] += ar;
-        im[i + k] += ai;
-        const t = cr * wr - ci * wi;
-        ci = cr * wi + ci * wr;
-        cr = t;
-      }
-    }
-  }
-}
+const MAX_FRAMES = 16000;
 
 function spectrogram(mono: Float32Array, sr: number): AudioAnalysis["spectrogram"] {
-  const frames = Math.max(1, Math.floor((mono.length - FFT_SIZE) / HOP) + 1);
+  // fichiers longs : pas élargi pour rester sous la largeur maximale d'un canvas
+  const hop = Math.max(HOP, Math.ceil(mono.length / MAX_FRAMES));
+  const frames = Math.max(1, Math.floor((mono.length - FFT_SIZE) / hop) + 1);
   const canvas = document.createElement("canvas");
   canvas.width = frames;
   canvas.height = BANDS;
@@ -106,7 +80,7 @@ function spectrogram(mono: Float32Array, sr: number): AudioAnalysis["spectrogram
   let globalMax = 1e-6;
   const all = new Float32Array(frames * BANDS);
   for (let f = 0; f < frames; f++) {
-    const off = f * HOP;
+    const off = f * hop;
     for (let i = 0; i < FFT_SIZE; i++) {
       re[i] = (mono[off + i] ?? 0) * window[i];
       im[i] = 0;
@@ -139,7 +113,7 @@ function spectrogram(mono: Float32Array, sr: number): AudioAnalysis["spectrogram
     }
   }
   ctx.putImageData(img, 0, 0);
-  return { canvas, frames, hopSec: HOP / sr };
+  return { canvas, frames, hopSec: hop / sr };
 }
 
 /** Palette sombre → violet → orange → blanc (type magma). */

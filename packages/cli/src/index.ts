@@ -28,8 +28,9 @@ program
   .option("--seed <n>", "graine de l'aléatoire (défaut : 12345 ou celle du projet)", num)
   .option("--fps <n>", "cadence (défaut : config/scene.json)", num)
   .option("--force", "ignore le cache et recalcule toutes les étapes")
+  .option("--rapide", "sans Whisper ni Rhubarb : lip sync approximatif depuis l'audio, émotions et gestes procéduraux")
   .action(async (opts) => {
-    const r = await prepare({ audio: opts.audio, texte: opts.texte, out: opts.out, sansLlm: opts.sansLlm, seed: opts.seed, fps: opts.fps, force: opts.force });
+    const r = await prepare({ audio: opts.audio, texte: opts.texte, out: opts.out, sansLlm: opts.sansLlm || opts.rapide, seed: opts.seed, fps: opts.fps, force: opts.force, rapide: opts.rapide });
     if (r.warnings.length) log.warn(`${r.warnings.length} avertissement(s) ci-dessus.`);
     log.info(`Suite : avatar preview ${opts.out}   puis   avatar render ${opts.out} --format mp4`);
   });

@@ -226,7 +226,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         const kind = String(o.kind ?? "audio");
         const source = path.join(dir, "source", path.basename(String(o.file ?? "")));
         if (!existsSync(source)) throw new Error(`fichier source introuvable : ${source}`);
-        const r = await prepare({ [kind === "texte" ? "texte" : "audio"]: source, out: dir, sansLlm: Boolean(o.sansLlm), force: Boolean(o.force), seed: typeof o.seed === "number" ? o.seed : undefined, root, signal: controller.signal });
+        const r = await prepare({ [kind === "texte" ? "texte" : "audio"]: source, out: dir, sansLlm: Boolean(o.sansLlm), force: Boolean(o.force), rapide: Boolean(o.rapide), seed: typeof o.seed === "number" ? o.seed : undefined, root, signal: controller.signal });
         setStatus(job, "termine", { result: { warnings: r.warnings, duration: r.performance.duration } });
         notify("performance.json", job.project);
       } else if (job.type === "render") {
