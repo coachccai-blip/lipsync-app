@@ -15,7 +15,11 @@ export interface LifeSchedule {
   headPhases: [number[], number[], number[]];
 }
 
-export function buildLifeSchedule(seed: number, duration: number, cfg: LifeConfig): LifeSchedule {
+/**
+ * @param forcedBlinks instants où un clignement doit avoir lieu (changements d'émotion) :
+ * le clignement commence juste avant pour que les yeux soient fermés à cet instant.
+ */
+export function buildLifeSchedule(seed: number, duration: number, cfg: LifeConfig, forcedBlinks: number[] = []): LifeSchedule {
   const root = new Prng(seed);
   const blinkRng = root.fork("blink");
   const gazeRng = root.fork("gaze");
@@ -31,6 +35,15 @@ export function buildLifeSchedule(seed: number, duration: number, cfg: LifeConfi
     }
     t += blinkRng.range(cfg.blink.minInterval, cfg.blink.maxInterval);
   }
+  for (const at of forcedBlinks) {
+    const start = Math.max(0, at - cfg.blink.duration * 0.4);
+    if (blinks.some((b) => Math.abs(b - start) < cfg.blink.duration * 1.5)) {
+      // un clignement naturel est déjà là : on le cale sur l'instant demandé
+      const i = blinks.findIndex((b) => Math.abs(b - start) < cfg.blink.duration * 1.5);
+      blinks[i] = start;
+    } else blinks.push(start);
+  }
+  blinks.sort((a, b) => a - b);
 
   const gazes: GazeTarget[] = [{ t: 0, x: 0, y: 0 }];
   let g = gazeRng.range(cfg.gaze.minInterval, cfg.gaze.maxInterval);

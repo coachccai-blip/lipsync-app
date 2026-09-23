@@ -220,6 +220,10 @@ export interface MarionnetteConfig {
   feather: number;
   /** Étirement vertical de la bouche selon l'énergie (0 = aucun). */
   mouthEnergy: number;
+  /** Intensité minimale d'un segment d'émotion pour afficher son image (les images ne se dosent pas). */
+  emotionThreshold: number;
+  /** Netteté des transitions de bouche (1 = fondu linéaire, 3 = quasi-bascule). */
+  mouthSharpness: number;
 }
 
 export interface BoneConfig {

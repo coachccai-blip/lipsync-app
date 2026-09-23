@@ -300,49 +300,46 @@ export class Puppet {
     ctx.translate(-this.width / 2, -this.height / 2);
     ctx.drawImage(this.base, 0, 0);
 
-    // bouche : fondu entre formes
+    // bouche : transition courte entre formes, rendue plus franche par une courbe de contraste
     const e = energyAt(frame.t, energy);
     const stretch = 1 + cfg.mouthEnergy * (e - 0.5) * 2 * frame.speaking;
-    for (const [shape, w] of Object.entries(frame.shapes)) {
-      if (shape === "X" || w <= 0.002) continue;
+    const sharp = Math.max(1, cfg.mouthSharpness ?? 2);
+    const active = Object.entries(frame.shapes).filter(([shape, w]) => shape !== "X" && w > 0.002);
+    let total = 0;
+    const weights = active.map(([shape, w]) => {
+      const ws = Math.pow(w, sharp);
+      total += ws;
+      return [shape, ws] as const;
+    });
+    const rest = Math.max(0, 1 - active.reduce((acc, [, w]) => acc + w, 0));
+    const restSharp = Math.pow(rest, sharp);
+    const norm = total + restSharp > 0 ? 1 / (total + restSharp) : 1;
+    // composition « over » en ordre croissant : chaque forme finit avec la couverture voulue
+    let covered = restSharp * norm;
+    for (const [shape, ws] of [...weights].sort((a, b) => a[1] - b[1])) {
       const layer = this.mouths.get(shape) ?? this.mouths.get(FALLBACK[shape] ?? "");
-      if (!layer) continue;
-      ctx.globalAlpha = Math.min(1, w);
+      const target = ws * norm;
+      covered += target;
+      if (!layer || target < 0.01) continue;
+      ctx.globalAlpha = Math.min(1, target / covered);
       const r = layer.rect;
       const cy = r.y + r.h / 2;
       ctx.drawImage(layer.canvas, r.x, cy - (r.h / 2) * stretch, r.w, r.h * stretch);
     }
-    // yeux : émotions puis clignement
-    let emoTotal = 0;
-    for (const [name, w] of Object.entries(frame.emotions)) {
-      const layer = this.emotions.get(name);
-      if (!layer || w <= 0.002) continue;
-      const a = Math.min(1 - emoTotal, w);
-      emoTotal += a;
-      ctx.globalAlpha = a;
-      ctx.drawImage(layer.canvas, layer.rect.x, layer.rect.y);
+    // yeux : une seule image d'émotion, changée pendant un clignement (jamais mélangée)
+    const emotionLayer = frame.emotionDisplayed ? this.emotions.get(frame.emotionDisplayed) : undefined;
+    if (emotionLayer) {
+      ctx.globalAlpha = 1;
+      ctx.drawImage(emotionLayer.canvas, emotionLayer.rect.x, emotionLayer.rect.y);
     }
+    // clignement par paliers nets : ouvert, mi-clos, fermé
     const blink = frame.blink;
-    if (blink > 0.01) {
-      if (this.eyes.half && this.eyes.closed) {
-        const closed = smoothstep((blink - 0.45) / 0.3);
-        const half = smoothstep((blink - 0.15) / 0.25) * (1 - closed);
-        if (half > 0.01) {
-          ctx.globalAlpha = half;
-          ctx.drawImage(this.eyes.half.canvas, this.eyes.half.rect.x, this.eyes.half.rect.y);
-        }
-        if (closed > 0.01) {
-          ctx.globalAlpha = closed;
-          ctx.drawImage(this.eyes.closed.canvas, this.eyes.closed.rect.x, this.eyes.closed.rect.y);
-        }
-      } else {
-        const layer = this.eyes.closed ?? this.eyes.half;
-        if (layer) {
-          ctx.globalAlpha = smoothstep((blink - 0.35) / 0.3);
-          ctx.drawImage(layer.canvas, layer.rect.x, layer.rect.y);
-        }
-      }
-    }
+    const closedLayer = this.eyes.closed ?? this.eyes.half;
+    const halfLayer = this.eyes.half;
+    ctx.globalAlpha = 1;
+    if (blink >= 0.7 && closedLayer) ctx.drawImage(closedLayer.canvas, closedLayer.rect.x, closedLayer.rect.y);
+    else if (blink >= 0.3 && halfLayer) ctx.drawImage(halfLayer.canvas, halfLayer.rect.x, halfLayer.rect.y);
+    else if (blink >= 0.5 && closedLayer) ctx.drawImage(closedLayer.canvas, closedLayer.rect.x, closedLayer.rect.y);
     ctx.globalAlpha = 1;
     ctx.restore();
   }

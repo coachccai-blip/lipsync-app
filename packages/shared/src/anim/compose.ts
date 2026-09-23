@@ -21,6 +21,11 @@ export interface FrameState {
   emotions: Record<string, number>;
   /** Clignement 0 (ouvert) .. 1 (fermé). */
   blink: number;
+  /**
+   * Émotion affichée en mode marionnette : une seule image à la fois, changée uniquement
+   * pendant un clignement (yeux fermés), jamais mélangée. undefined = yeux de base.
+   */
+  emotionDisplayed?: string;
 }
 
 export interface Animator {
@@ -33,8 +38,26 @@ export interface Animator {
  * Combine les quatre couches en une fonction pure du temps. Utilisé à l'identique
  * par la prévisualisation et le rendu hors ligne.
  */
+/** Émotion dominante (segments bruts, sans fondu) à t, au-dessus d'une intensité minimale. */
+function dominantAt(t: number, perf: Performance, minIntensity: number): string | undefined {
+  let best: { emotion: string; intensity: number } | undefined;
+  for (const s of perf.expressions) {
+    if (t >= s.start && t < s.end && s.emotion !== "neutre" && s.intensity >= minIntensity && (!best || s.intensity > best.intensity)) best = s;
+  }
+  return best?.emotion;
+}
+
 export function createAnimator(perf: Performance, cfg: AllConfig, gestures?: GestureSource): Animator {
-  const schedule = buildLifeSchedule(perf.seed, perf.duration, cfg.scene.life);
+  // un clignement à chaque frontière d'émotion : la bascule d'image se fait yeux fermés
+  const boundaries = new Set<number>();
+  for (const s of perf.expressions) {
+    if (s.emotion === "neutre") continue;
+    if (s.start > 0.05) boundaries.add(Math.round(s.start * 1000) / 1000);
+    if (s.end < perf.duration - 0.05) boundaries.add(Math.round(s.end * 1000) / 1000);
+  }
+  const schedule = buildLifeSchedule(perf.seed, perf.duration, cfg.scene.life, [...boundaries]);
+  const blinkClosedAt = cfg.scene.life.blink.duration * 0.4;
+  const minIntensity = cfg.scene.marionnette?.emotionThreshold ?? 0.3;
   const gestureSource = gestures ?? new ProceduralGestureSource(perf.gestures, cfg.gestures);
   const test = (perf as Performance & { test?: boolean }).test === true;
 
@@ -64,8 +87,16 @@ export function createAnimator(perf: Performance, cfg: AllConfig, gestures?: Ges
       bones.head = [head[0], head[1] + 20 * Math.sin(Math.PI * t), head[2]];
     }
 
+    // image d'émotion : état échantillonné au dernier instant « yeux fermés » (ou à 0)
+    let sample = 0;
+    for (const b of schedule.blinks) {
+      if (b + blinkClosedAt <= t) sample = b + blinkClosedAt;
+      else break;
+    }
+    const emotionDisplayed = dominantAt(sample, perf, minIntensity);
+
     for (const k in morphs) morphs[k] = clamp(morphs[k]);
-    return { t, morphs, bones, speaking, restPose: cfg.gestures.restPose ?? {}, shapes, emotions, blink: life.morphs.eyeBlinkLeft ?? 0 };
+    return { t, morphs, bones, speaking, restPose: cfg.gestures.restPose ?? {}, shapes, emotions, blink: life.morphs.eyeBlinkLeft ?? 0, emotionDisplayed };
   };
 
   return { frameAt, schedule, gestures: gestureSource };

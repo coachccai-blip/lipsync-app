@@ -122,9 +122,11 @@
     "zoom": 1,
     "offsetX": 0,
     "offsetY": 0,
-    "motion": 2.5,
+    "motion": 1.6,
     "breathing": 0.006,
     "feather": 18,
-    "mouthEnergy": 0.08
+    "mouthEnergy": 0.08,
+    "emotionThreshold": 0.3,
+    "mouthSharpness": 2
   }
 }

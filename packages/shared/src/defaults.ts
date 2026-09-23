@@ -204,7 +204,7 @@ export const DEFAULT_SCENE: SceneConfig = {
     eyeCatch: { color: "#ffffff", intensity: 0.6, position: [0.3, 0.3, 1.4] },
     environment: { enabled: true, intensity: 0.5 },
   },
-  marionnette: { zoom: 1.0, offsetX: 0, offsetY: 0, motion: 2.5, breathing: 0.006, feather: 18, mouthEnergy: 0.08 },
+  marionnette: { zoom: 1.0, offsetX: 0, offsetY: 0, motion: 1.6, breathing: 0.006, feather: 18, mouthEnergy: 0.08, emotionThreshold: 0.3, mouthSharpness: 2 },
   life: {
     enabled: true,
     blink: { minInterval: 2, maxInterval: 6, duration: 0.16, doubleProbability: 0.15 },
