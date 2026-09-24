@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bubbleBackground, bubbleCornerRadius, gradientFromColor, hexToRgb, hslToRgb, rgbToHex, rgbToHsl, traceBubblePath } from "../src/bubble.js";
+import { bubbleBackground, bubbleCornerRadius, bubbleParallax, gradientFromColor, hexToRgb, hslToRgb, rgbToHex, rgbToHsl, traceBubblePath } from "../src/bubble.js";
 
 describe("fond de bulle", () => {
   it("convertit hex ↔ hsl sans perte notable", () => {
@@ -58,5 +58,15 @@ describe("forme de la bulle", () => {
     expect(calls[1]).toBe("move 140,50");
     expect(calls[2]).toBe("arcTo 1030,50,1030,1030,90");
     expect(calls.at(-1)).toBe("close");
+  });
+});
+
+describe("parallaxe", () => {
+  it("glisse à l'inverse de la tête, nul si désactivée", () => {
+    const p = bubbleParallax([2, -4, 1], 3);
+    expect(p.dx).toBeCloseTo(12, 6);
+    expect(p.dy).toBeCloseTo(-3.6, 6);
+    expect(bubbleParallax([2, -4, 1], 0)).toEqual({ dx: 0, dy: 0 });
+    expect(bubbleParallax(undefined, 3)).toEqual({ dx: 0, dy: 0 });
   });
 });

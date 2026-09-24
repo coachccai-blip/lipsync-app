@@ -1,3 +1,6 @@
+import { applyBubbleMotion } from "./bubble.js";
+import { PostFX } from "./post.js";
+import { bubbleParallax, type FrameState } from "@avatar/shared";
 import "./api.js";
 import "./ui/style.css";
 import * as THREE from "three";
@@ -12,6 +15,7 @@ import type { LoadReport, PlayerMode, ProjectPayload } from "./api.js";
 class Player {
   stage?: Stage;
   puppetStage?: PuppetStage;
+  private post?: PostFX;
   puppet?: Puppet;
   private puppetUrl?: string;
   model?: LoadedModel;
@@ -133,12 +137,33 @@ class Player {
     const frame = this.animator.frameAt(t);
     if (this.puppet && this.puppetStage) {
       this.puppetStage.render(this.puppet, frame, this.perf?.energy);
+      this.finishFrame(frame, this.puppetStage.diameter);
       return;
     }
     if (!this.stage || !this.model) throw new Error("Aucun modèle chargé.");
     if (this.overrideMorphs) frame.morphs = { ...this.overrideMorphs };
     applyFrame(this.model, frame, this.clips && this.report?.gestureSource === "clips" ? () => this.clips!.update(t) : undefined);
     this.stage.render();
+    this.finishFrame(frame, this.stage.renderer.domElement.width);
+  }
+
+  /** Parallaxe du fond et post-traitement (vignettage, grain), communs aux deux scènes. */
+  private finishFrame(frame: FrameState, diameter: number): void {
+    if (!this.cfg) return;
+    applyBubbleMotion(this.cfg.scene, frame.bones.head);
+    if (!this.post) this.post = new PostFX();
+    this.post.render(this.cfg.scene.post, diameter, Math.round(frame.t * (this.perf?.fps ?? 30)));
+  }
+
+  /** Décalage du fond de bulle (parallaxe) à l'instant t, pour l'export dans le navigateur. */
+  bubbleOffsetAt(t: number): { dx: number; dy: number } {
+    if (!this.animator || !this.cfg) return { dx: 0, dy: 0 };
+    return bubbleParallax(this.animator.frameAt(t).bones.head, this.cfg.scene.bubble.parallaxe ?? 0);
+  }
+
+  /** Canvas du post-traitement (au-dessus du personnage), pour l'export dans le navigateur. */
+  postCanvas(): HTMLCanvasElement | undefined {
+    return this.post?.canvas;
   }
 
   getDuration(): number {

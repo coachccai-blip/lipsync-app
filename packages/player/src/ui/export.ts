@@ -1,5 +1,5 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import { bubbleBackground, traceBubblePath, type AllConfig } from "@avatar/shared";
+import { PARALLAX_OVERSCAN, bubbleBackground, traceBubblePath, type AllConfig } from "@avatar/shared";
 import { bubbleGeometry } from "../bubble.js";
 
 export interface ExportOptions {
@@ -8,6 +8,10 @@ export interface ExportOptions {
   duration: number;
   renderFrame(t: number): Promise<void>;
   captureCanvas(): HTMLCanvasElement | undefined;
+  /** Canvas du post-traitement, dessiné au-dessus du personnage. */
+  postCanvas?(): HTMLCanvasElement | undefined;
+  /** Décalage du fond de bulle (parallaxe) à l'instant t. */
+  bubbleOffset?(t: number): { dx: number; dy: number };
   audio?: { mono: Float32Array; sampleRate: number };
   onProgress?(done: number, total: number): void;
   /** Avertissements non bloquants (ex. audio encodé en Opus faute d'AAC). */
@@ -79,7 +83,8 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
   const ctx = out.getContext("2d")!;
   const { d, cx, cy } = bubbleGeometry(o.cfg.scene);
   const ring = o.cfg.scene.bubble.ring;
-  const bubbleFill = parseCssBackground(bubbleBackground(o.cfg.scene.bubble), ctx, cx - d / 2, cy - d / 2, d, d);
+  const over = (o.cfg.scene.bubble.parallaxe ?? 0) > 0 ? PARALLAX_OVERSCAN : 1;
+  const bd = d * over;
   const frameUs = 1e6 / fps;
   for (let n = 0; n < total; n++) {
     if (o.signal?.aborted) {
@@ -95,9 +100,14 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
     ctx.save();
     traceBubblePath(ctx, o.cfg.scene.bubble, cx, cy, d);
     ctx.clip();
-    ctx.fillStyle = bubbleFill;
-    ctx.fillRect(cx - d / 2, cy - d / 2, d, d);
+    const off = o.bubbleOffset?.(n / fps) ?? { dx: 0, dy: 0 };
+    const bx = cx - bd / 2 + off.dx;
+    const by = cy - bd / 2 + off.dy;
+    ctx.fillStyle = parseCssBackground(bubbleBackground(o.cfg.scene.bubble), ctx, bx, by, bd, bd);
+    ctx.fillRect(bx, by, bd, bd);
     if (src) ctx.drawImage(src, cx - d / 2, cy - d / 2, d, d);
+    const post = o.postCanvas?.();
+    if (post) ctx.drawImage(post, cx - d / 2, cy - d / 2, d, d);
     ctx.restore();
     if (ring.enabled && ring.width > 0) {
       traceBubblePath(ctx, o.cfg.scene.bubble, cx, cy, d, ring.width / 2);

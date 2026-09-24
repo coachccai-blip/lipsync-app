@@ -122,3 +122,15 @@ export function traceBubblePath(
   ctx.arcTo(x, y, x + s, y, r);
   ctx.closePath();
 }
+
+/**
+ * Parallaxe du fond de bulle : glissement (px) opposé au mouvement de tête, pour un effet de
+ * profondeur. `head` = rotation de tête en degrés [tangage, lacet, roulis].
+ */
+export function bubbleParallax(head: [number, number, number] | undefined, pxPerDegree: number): { dx: number; dy: number } {
+  if (!head || !pxPerDegree) return { dx: 0, dy: 0 };
+  return { dx: -head[1] * pxPerDegree, dy: -head[0] * pxPerDegree * 0.6 };
+}
+
+/** Agrandissement du fond nécessaire pour que la parallaxe ne découvre jamais le bord. */
+export const PARALLAX_OVERSCAN = 1.08;

@@ -14,6 +14,8 @@ export interface PlayerLike {
   load(payload: ProjectPayload): Promise<LoadReport>;
   renderFrame(t: number): Promise<void>;
   captureCanvas(): HTMLCanvasElement | undefined;
+  postCanvas(): HTMLCanvasElement | undefined;
+  bubbleOffsetAt(t: number): { dx: number; dy: number };
   report?: LoadReport;
 }
 
@@ -735,6 +737,8 @@ export class StudioApp {
         duration: this.perf.duration,
         renderFrame: (t) => this.player.renderFrame(t),
         captureCanvas: () => this.player.captureCanvas(),
+        postCanvas: () => this.player.postCanvas(),
+        bubbleOffset: (t) => this.player.bubbleOffsetAt(t),
         audio: this.audioAnalysis ? { mono: this.audioAnalysis.mono, sampleRate: this.audioAnalysis.sampleRate } : undefined,
         signal: abort.signal,
         onWarning: (m) => this.toast(m, "warn", 8000),

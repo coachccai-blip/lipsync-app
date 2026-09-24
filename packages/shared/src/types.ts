@@ -174,6 +174,8 @@ export interface SceneConfig {
     shape?: "cercle" | "carre";
     /** Rayon des coins du carré, en pixels (0 = angles vifs). */
     cornerRadius?: number;
+    /** Parallaxe du fond de bulle : pixels de glissement par degré de rotation de tête (0 = fixe). */
+    parallaxe?: number;
     /** Diamètre (ou côté du carré) en pixels, ou 'auto' = min(width, height) - 2*margin. */
     diameter: number | "auto";
     margin: number;
@@ -213,8 +215,19 @@ export interface SceneConfig {
     environment: { enabled: boolean; intensity: number };
   };
   life: LifeConfig;
+  /** Post-traitement de l'image du personnage et de la bulle. */
+  post?: PostConfig;
   /** Réglages du mode marionnette 2D (modèle = manifeste marionnette.json). */
   marionnette: MarionnetteConfig;
+}
+
+export interface PostConfig {
+  /** Assombrissement des bords de la bulle (0..1). */
+  vignette: number;
+  /** Grain fin uniforme, déterministe par image (0..0.2). */
+  grain: number;
+  /** Netteté ajoutée au personnage 2D (0..1). */
+  nettete: number;
 }
 
 export interface MarionnetteConfig {
@@ -251,6 +264,8 @@ export interface MarionnetteConfig {
   sourcilsAccent?: number;
   /** Images de mains sur la piste gestes. */
   mains?: boolean;
+  /** Balancement des épaules (degrés) pendant un geste de main. */
+  epaules?: number;
   /** Netteté des transitions de bouche (1 = fondu linéaire, 3 = quasi-bascule). */
   mouthSharpness: number;
 }

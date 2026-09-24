@@ -1,4 +1,4 @@
-import { bubbleBackground, bubbleCornerRadius, type SceneConfig } from "@avatar/shared";
+import { PARALLAX_OVERSCAN, bubbleBackground, bubbleCornerRadius, bubbleParallax, type SceneConfig } from "@avatar/shared";
 
 /** Met en page la bulle CSS (taille, position, fond, anneau) et renvoie son diamètre. */
 export function layoutBubble(cfg: SceneConfig, background: "green" | "transparent"): number {
@@ -35,4 +35,20 @@ export function bubbleGeometry(cfg: SceneConfig): { d: number; cx: number; cy: n
   const d = cfg.bubble.diameter === "auto" ? Math.min(width, height) - 2 * cfg.bubble.margin : cfg.bubble.diameter;
   const pos = cfg.bubble.position ?? { x: "center", y: "center" };
   return { d, cx: pos.x === "center" ? width / 2 : pos.x, cy: pos.y === "center" ? height / 2 : pos.y };
+}
+
+/** Glissement du fond de bulle selon la tête (parallaxe), à appeler à chaque image. */
+export function applyBubbleMotion(cfg: SceneConfig, head: [number, number, number] | undefined): void {
+  const bubble = document.getElementById("bubble");
+  if (!bubble) return;
+  const px = cfg.bubble.parallaxe ?? 0;
+  if (!px) {
+    bubble.style.backgroundSize = "";
+    bubble.style.backgroundPosition = "";
+    return;
+  }
+  const { dx, dy } = bubbleParallax(head, px);
+  const over = `${PARALLAX_OVERSCAN * 100}%`;
+  bubble.style.backgroundSize = `${over} ${over}`;
+  bubble.style.backgroundPosition = `calc(50% + ${dx.toFixed(2)}px) calc(50% + ${dy.toFixed(2)}px)`;
 }

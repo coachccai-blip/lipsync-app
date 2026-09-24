@@ -57,18 +57,23 @@ try {
     const out = []; const tiles = {};
     for (const c of combos) {
       const img = await render(c.ov);
+      // référence : l'état neutre, ou pour une main le même visage sans la main
+      const allowHands = Boolean(c.ov.gesture);
+      const ref = allowHands ? await render({ ...c.ov, gesture: undefined }) : neutral;
       // pixels modifiés hors zones autorisées
       let leak = 0, changed = 0, speckles = 0;
-      const allowHands = Boolean(c.ov.gesture);
       for (let y = 0; y < d; y += 2) for (let x = 0; x < d; x += 2) {
         const i = (y * d + x) * 4;
-        const diff = Math.max(Math.abs(img[i] - neutral[i]), Math.abs(img[i + 1] - neutral[i + 1]), Math.abs(img[i + 2] - neutral[i + 2]), Math.abs(img[i + 3] - neutral[i + 3]));
+        const diff = Math.max(Math.abs(img[i] - ref[i]), Math.abs(img[i + 1] - ref[i + 1]), Math.abs(img[i + 2] - ref[i + 2]), Math.abs(img[i + 3] - ref[i + 3]));
         if (allowHands && neutral[i + 3] < 8 && img[i + 3] > 8 && img[i + 3] < 200) speckles++;
         if (diff <= 30) continue;
         changed++;
         const okZone = inside(x, y, zones.mouth) || inside(x, y, zones.eyes) || inside(x, y, zones.brows);
-        const faceCenter = Math.hypot(x - d / 2, y - d * 0.42) < d * 0.22; // visage : interdit aux mains
-        if (!okZone && !(allowHands && !faceCenter)) leak++;
+        // calques du visage : rien ne change hors de leur zone ; mains (et balancement des
+        // épaules qui les accompagne) : rien ne change DANS les zones du visage
+        // (pour les mains, l'ombre portée qui bouge avec les épaules ne compte pas : seuls les
+        // pixels opaques du personnage sont examinés)
+        if (allowHands ? okZone && neutral[i + 3] > 200 : !okZone) leak++;
       }
       out.push({ name: c.name, changed, leak, speckles });
       // vignette visage

@@ -17,6 +17,7 @@
   "bubble": {
     "shape": "cercle",
     "cornerRadius": 96,
+    "parallaxe": 3,
     "diameter": "auto",
     "margin": 40,
     "background": "radial-gradient(circle at 50% 35%, #fff7e6 0%, #f3d9b1 60%, #e6c28f 100%)",
@@ -123,6 +124,11 @@
       "duration": 0.35
     }
   },
+  "post": {
+    "vignette": 0.18,
+    "grain": 0.035,
+    "nettete": 0.3
+  },
   "marionnette": {
     "zoom": 1,
     "offsetX": 0,
@@ -139,6 +145,7 @@
     "ombre": 0.22,
     "regard": true,
     "sourcilsAccent": 0.55,
-    "mains": true
+    "mains": true,
+    "epaules": 0.8
   }
 }

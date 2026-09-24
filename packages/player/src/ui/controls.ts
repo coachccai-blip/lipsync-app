@@ -34,6 +34,7 @@ export const SECTIONS: SectionSpec[] = [
       { path: "scene.fps", label: "Cadence (i/s)", type: "select", options: ["24", "25", "30", "50", "60"] },
       { path: "scene.bubble.shape", label: "Forme de la bulle", type: "select", options: ["cercle", "carre"] },
       { path: "scene.bubble.cornerRadius", label: "Rayon des coins du carré (px)", type: "range", min: 0, max: 400, step: 4 },
+      { path: "scene.bubble.parallaxe", label: "Parallaxe du fond (px par degré de tête)", type: "range", min: 0, max: 10, step: 0.5 },
       { path: "scene.bubble.diameter", label: "Diamètre ou côté (px ou auto)", type: "text" },
       { path: "scene.bubble.margin", label: "Marge (px)", type: "number", min: 0, max: 500, step: 1 },
       { path: "scene.bubble.position.x", label: "Centre X (px ou center)", type: "text" },
@@ -69,6 +70,7 @@ export const SECTIONS: SectionSpec[] = [
       { path: "scene.marionnette.regard", label: "Images de regard (saccades)", type: "checkbox" },
       { path: "scene.marionnette.sourcilsAccent", label: "Sourcils sur accents (seuil, 1 = jamais)", type: "range", min: 0.2, max: 1, step: 0.05 },
       { path: "scene.marionnette.mains", label: "Images de mains (piste gestes)", type: "checkbox" },
+      { path: "scene.marionnette.epaules", label: "Balancement des épaules sur les gestes (°)", type: "range", min: 0, max: 3, step: 0.1 },
       { path: "scene.marionnette.mouthSharpness", label: "Transitions de bouche (4 = bascule nette, jamais deux bouches)", type: "range", min: 1, max: 4, step: 0.1 },
       { path: "scene.marionnette.emotionThreshold", label: "Intensité minimale pour afficher une émotion", type: "range", min: 0, max: 1, step: 0.05 },
     ],
@@ -129,6 +131,17 @@ export const SECTIONS: SectionSpec[] = [
     controls: [
       { path: "emotions.fadeMs", label: "Fondu (ms)", type: "range", min: 50, max: 1500, step: 10 },
       { path: "emotions.speechAttenuation", label: "Atténuation bouche pendant la parole", type: "range", min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
+    id: "post",
+    title: "Post-traitement",
+    file: "scene",
+    hint: "Appliqué dans la bulle, identique en prévisualisation, rendu serveur et export navigateur. Le grain est déterministe (même image à chaque rendu).",
+    controls: [
+      { path: "scene.post.vignette", label: "Vignettage des bords", type: "range", min: 0, max: 0.6, step: 0.02 },
+      { path: "scene.post.grain", label: "Grain fin", type: "range", min: 0, max: 0.15, step: 0.005 },
+      { path: "scene.post.nettete", label: "Netteté du personnage 2D", type: "range", min: 0, max: 1, step: 0.05 },
     ],
   },
   {

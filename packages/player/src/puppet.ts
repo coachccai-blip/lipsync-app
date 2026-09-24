@@ -1,5 +1,6 @@
 import { energyAt, smoothstep, type EnergyTrack, type FrameState, type MarionnetteConfig, type SceneConfig } from "@avatar/shared";
 import { layoutBubble } from "./bubble.js";
+import { sharpenCanvas } from "./post.js";
 import type { LoadReport } from "./api.js";
 
 export interface Rect {
@@ -226,9 +227,20 @@ export function groupMask(images: Uint8ClampedArray[], base: Uint8ClampedArray, 
     const core = changeCore(img, base, width, rect, gate);
     for (let i = 0; i < union.length; i++) if (core[i] > 0) union[i] = 1;
   }
-  // rangées (de l'image) au-dessus de rowMin ignorées : ex. clignement limité à la zone des yeux
-  if (rowMin !== undefined) for (let y = 0; y < rect.h && rect.y + y < rowMin; y++) union.fill(0, y * rect.w, (y + 1) * rect.w);
-  return softenCore(union, rect.w, rect.h);
+  const soft = softenCore(union, rect.w, rect.h);
+  // rangées (de l'image) au-dessus de rowMin ignorées, coupées APRÈS l'adoucissement pour que
+  // celui-ci ne remonte pas dans la zone interdite (ex. clignement limité à la zone des yeux,
+  // sans toucher le bas des sourcils)
+  if (rowMin !== undefined) {
+    const ramp = 12; // fondu vertical court sous la coupe : pas de ligne visible entre deux teintes de peau
+    for (let y = 0; y < rect.h; y++) {
+      const row = rect.y + y;
+      if (row >= rowMin + ramp) break;
+      const k = row < rowMin ? 0 : (row - rowMin) / ramp;
+      for (let x = 0; x < rect.w; x++) soft[y * rect.w + x] *= k;
+    }
+  }
+  return soft;
 }
 
 /**
@@ -508,7 +520,7 @@ export class Puppet {
     const eyesMask = gate > 0 ? groupMask(eyeImages, baseData.data, this.width, eyesRect, gate) : undefined;
     // clignement : seulement la zone des yeux (pas les sourcils), pour qu'une émotion ou des
     // sourcils levés gardent leurs sourcils pendant le clignement
-    const blinkRowMin = this.regions.eyesOnly ? this.regions.eyesOnly.y - Math.round(this.regions.eyesOnly.h * 0.15) : undefined;
+    const blinkRowMin = this.regions.eyesOnly ? this.regions.eyesOnly.y - Math.round(this.regions.eyesOnly.h * 0.25) : undefined;
     const blinkMask = gate > 0 && blinkRowMin !== undefined ? groupMask(eyeImages, baseData.data, this.width, eyesRect, gate, blinkRowMin) : eyesMask;
     // regard : zone des yeux seuls (les images de regard changent parfois aussi sourcils ou bouche, ignorés)
     const eyesOnly = this.regions.eyesOnly ? padRect(this.regions.eyesOnly, Math.round(feather), this.width, this.height) : undefined;
@@ -598,8 +610,17 @@ export class Puppet {
     const scale = (d / Math.max(this.width, this.height)) * cfg.zoom;
     const head = frame.bones.head ?? [0, 0, 0];
     const breath = frame.bones.spine1?.[0] ?? 0; // degrés, <= 0
-    const s = scale * (1 + cfg.breathing * Math.min(1, -breath / 0.8));
+    const breathPhase = Math.min(1, -breath / 0.8); // 0 (expiré) .. 1 (inspiré)
     const suivi = Math.max(0, Math.min(1, cfg.suivi ?? 0));
+    // respiration : image entière quand le corps est rigide, sinon le buste seul se soulève
+    const s = suivi > 0 ? scale : scale * (1 + cfg.breathing * breathPhase);
+    const torsoRise = suivi > 0 ? cfg.breathing * d * 1.2 * breathPhase : 0;
+    const headRise = torsoRise * 0.4;
+    // épaules : léger balancement vers la main qui se lève
+    const g = frame.gesture;
+    const shoulderSide = g && g.weight > 0 ? (g.clip === "explication" || g.clip === "mains_ouvertes" ? 0 : -1) : 0;
+    const shoulderRot = ((cfg.epaules ?? 0) * shoulderSide * (g?.weight ?? 0) * Math.PI) / 180;
+    const shoulderShift = shoulderSide * (g?.weight ?? 0) * d * 0.004;
     const tx = head[1] * cfg.motion * scale;
     const ty = head[0] * cfg.motion * 0.6 * scale;
     const rot = (head[2] * 0.4 * Math.PI) / 180;
@@ -619,14 +640,14 @@ export class Puppet {
       fn();
       ctx.restore();
     };
-    const drawHead = (fn: () => void) => withTransform(tx, ty, rot, fn);
-    const drawTorso = (fn: () => void) => withTransform(tx * torsoK, ty * torsoK, rot * torsoK, fn);
+    const drawHead = (fn: () => void) => withTransform(tx, ty - headRise, rot, fn);
+    const drawTorso = (fn: () => void) => withTransform(tx * torsoK + shoulderShift, ty * torsoK - torsoRise, rot * torsoK + shoulderRot, fn);
 
     // ombre de contact
     const ombre = cfg.ombre ?? 0;
     if (this.shadow && ombre > 0) {
       ctx.globalAlpha = ombre;
-      withTransform(tx * torsoK, ty * torsoK + d * 0.012, rot * torsoK, () => ctx.drawImage(this.shadow!, 0, 0));
+      withTransform(tx * torsoK + shoulderShift, ty * torsoK - torsoRise + d * 0.012, rot * torsoK + shoulderRot, () => ctx.drawImage(this.shadow!, 0, 0));
       ctx.globalAlpha = 1;
     }
 
@@ -634,7 +655,7 @@ export class Puppet {
     if (this.bands && suivi > 0) {
       drawTorso(() => ctx.drawImage(this.bands!.torso, 0, 0));
       drawHead(() => ctx.drawImage(this.bands!.head, 0, 0));
-      withTransform(tx + lagX, ty + lagY, rot, () => ctx.drawImage(this.bands!.hair, 0, 0));
+      withTransform(tx + lagX, ty + lagY - headRise, rot, () => ctx.drawImage(this.bands!.hair, 0, 0));
     } else drawHead(() => ctx.drawImage(this.base, 0, 0));
 
     // mains : piste gestes, fondu d'entrée / sortie, sous les calques du visage
@@ -780,6 +801,8 @@ export class PuppetStage {
 
   render(puppet: Puppet, frame: FrameState, energy: EnergyTrack | undefined): void {
     puppet.render(this.ctx, this.diameter, frame, this.cfg.marionnette, energy);
+    const nettete = this.cfg.post?.nettete ?? 0;
+    if (nettete > 0) sharpenCanvas(this.canvas, nettete);
   }
 
   dispose(): void {
