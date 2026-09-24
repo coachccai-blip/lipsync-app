@@ -211,6 +211,8 @@ Douze images optionnelles enrichissent la marionnette (prompts dans `docs/prompt
 
 Chaque calque n'est composé que dans sa zone (yeux seuls, bande des sourcils, bouche, tout le cadre sauf le visage pour les mains) : une image de regard qui aurait aussi changé la bouche, ou une image de main qui aurait changé les sourcils, ne pollue pas le reste. Les images sont détourées sur leur propre couleur de fond (médiane des bords), plus largement là où la base est déjà du fond.
 
+`npm run verif-marionnette [projet] [dossier]` passe toutes les combinaisons (émotion × bouche × clignement × regard × sourcils × mains) dans Chrome headless, vérifie qu'aucun calque ne modifie l'image hors de sa zone, et écrit une vignette par combinaison pour contrôle visuel.
+
 Sans image supplémentaire, la phase « mouvement » ajoute : hochement sur les accents (`life.head.nodOnAccent`), inclinaison de la tête à la fin des phrases interrogatives (`life.head.tiltOnQuestion`, signe alterné), suivi retardé des cheveux et découplage du buste (`marionnette.suivi` : la tête bouge, le buste suit à 40 %, les cheveux traînent de 90 ms), et une ombre de contact du personnage sur le fond de bulle (`marionnette.ombre`).
 
 ### Une image propre, sans grésillement

@@ -14,6 +14,7 @@
     "setup": "node scripts/setup.mjs",
     "inspect-model": "node scripts/inspect-model.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "verif-marionnette": "node scripts/verif-marionnette.mjs",
     "build": "npm run build:node && npm run build:player",
     "build:node": "tsc -b packages/shared packages/pipeline packages/renderer packages/cli",
     "build:player": "npm run build -w @avatar/player",

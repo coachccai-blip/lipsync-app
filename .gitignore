@@ -12,3 +12,4 @@ tools/
 .cache/
 *.log
 .DS_Store
+verif-marionnette/

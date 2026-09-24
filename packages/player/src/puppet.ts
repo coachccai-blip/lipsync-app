@@ -220,12 +220,14 @@ export function changeMask(img: Uint8ClampedArray, base: Uint8ClampedArray, widt
  * noyaux, pour que chaque calque recouvre aussi ce que les autres images changent (la bouche
  * au repos de la base doit disparaître sous n'importe quelle bouche ouverte).
  */
-export function groupMask(images: Uint8ClampedArray[], base: Uint8ClampedArray, width: number, rect: Rect, gate: number): Float32Array {
+export function groupMask(images: Uint8ClampedArray[], base: Uint8ClampedArray, width: number, rect: Rect, gate: number, rowMin?: number): Float32Array {
   const union = new Float32Array(rect.w * rect.h);
   for (const img of images) {
     const core = changeCore(img, base, width, rect, gate);
     for (let i = 0; i < union.length; i++) if (core[i] > 0) union[i] = 1;
   }
+  // rangées (de l'image) au-dessus de rowMin ignorées : ex. clignement limité à la zone des yeux
+  if (rowMin !== undefined) for (let y = 0; y < rect.h && rect.y + y < rowMin; y++) union.fill(0, y * rect.w, (y + 1) * rect.w);
   return softenCore(union, rect.w, rect.h);
 }
 
@@ -504,6 +506,10 @@ export class Puppet {
     const eyeImages = [...pick("eyes:"), ...pick("emotion:")];
     const mouthMask = gate > 0 ? groupMask(mouthImages, baseData.data, this.width, mouthRect, gate) : undefined;
     const eyesMask = gate > 0 ? groupMask(eyeImages, baseData.data, this.width, eyesRect, gate) : undefined;
+    // clignement : seulement la zone des yeux (pas les sourcils), pour qu'une émotion ou des
+    // sourcils levés gardent leurs sourcils pendant le clignement
+    const blinkRowMin = this.regions.eyesOnly ? this.regions.eyesOnly.y - Math.round(this.regions.eyesOnly.h * 0.15) : undefined;
+    const blinkMask = gate > 0 && blinkRowMin !== undefined ? groupMask(eyeImages, baseData.data, this.width, eyesRect, gate, blinkRowMin) : eyesMask;
     // regard : zone des yeux seuls (les images de regard changent parfois aussi sourcils ou bouche, ignorés)
     const eyesOnly = this.regions.eyesOnly ? padRect(this.regions.eyesOnly, Math.round(feather), this.width, this.height) : undefined;
     const gazeMask = eyesOnly && gate > 0 ? groupMask([...pick("gaze:"), ...pick("eyes:")], baseData.data, this.width, eyesOnly, gate) : undefined;
@@ -528,15 +534,26 @@ export class Puppet {
     for (const [k, d] of entries) {
       if (k.startsWith("mouth:")) this.mouths.set(k.slice(6), makeLayer(d, mouthRect, feather, mouthMask, smoothing));
       else if (k.startsWith("smile:")) this.mouthsSmile.set(k.slice(6), makeLayer(d, mouthRect, feather, mouthMask, smoothing));
-      else if (k === "eyes:half") this.eyes.half = makeLayer(d, eyesRect, feather, eyesMask, smoothing);
-      else if (k === "eyes:closed") this.eyes.closed = makeLayer(d, eyesRect, feather, eyesMask, smoothing);
+      else if (k === "eyes:half") this.eyes.half = makeLayer(d, eyesRect, feather, blinkMask, smoothing);
+      else if (k === "eyes:closed") this.eyes.closed = makeLayer(d, eyesRect, feather, blinkMask, smoothing);
       else if (k.startsWith("emotion:")) this.emotions.set(k.slice(8), makeLayer(d, eyesRect, feather, eyesMask, smoothing));
       else if (k.startsWith("gaze:") && eyesOnly) this.gaze.set(k.slice(5), makeLayer(d, eyesOnly, feather, gazeMask, smoothing));
       else if (k.startsWith("brow:") && browsRect) this.brows.set(k.slice(5), makeLayer(d, browsRect, feather, browMaskFor(d.data), smoothing));
       else if (k.startsWith("hand:")) {
         let mask = changeMask(d.data, baseData.data, this.width, full, Math.max(12, gate));
         mask = excludeRects(mask, full, faceExclusion);
-        this.hands.set(k.slice(5), makeLayer(d, full, 0, mask, smoothing));
+        // là où la base est du fond, seuls les pixels franchement opaques de l'image comptent :
+        // les résidus semi-transparents du détourage (bruit du fond) disparaissent, le bord
+        // anti-aliasé de la main reste
+        const clean = new ImageData(new Uint8ClampedArray(d.data), d.width, d.height);
+        const cd = clean.data;
+        const bd = baseData.data;
+        for (let i = 3; i < cd.length; i += 4) {
+          if (bd[i] >= 128) continue;
+          const a = cd[i] / 255;
+          cd[i] = Math.round(255 * smoothstep(Math.min(1, Math.max(0, (a - 0.35) / 0.4))));
+        }
+        this.hands.set(k.slice(5), makeLayer(clean, full, 0, mask, smoothing));
       }
     }
     this.buildBands(mouthRect, browsRect ?? eyesRect);
