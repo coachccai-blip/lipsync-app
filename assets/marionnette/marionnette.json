@@ -1,5 +1,5 @@
 {
-  "_doc": "Marionnette 2D : images alignées sur base.png. Les zones bouche et yeux sont détectées automatiquement par différence avec la base (ou fixées ici via regions). keyColor : couleur de fond à rendre transparente (null = conserver le fond).",
+  "_doc": "Marionnette 2D : images alignées sur base.png. Les zones bouche et yeux sont détectées automatiquement par différence avec la base (ou fixées ici via regions). keyColor : couleur de fond à rendre transparente (null = conserver le fond). gaze / brows / mouthsSmile / hands : calques optionnels (regard, sourcils sur accents, bouches souriantes pendant smileEmotions, mains sur la piste gestes, clé = nom de geste).",
   "base": "base.png",
   "mouths": {
     "X": "bouche_X.png",
@@ -24,5 +24,28 @@
   },
   "keyColor": "auto",
   "keyTolerance": 0.12,
-  "regions": null
+  "regions": null,
+  "gaze": {
+    "left": "regard_gauche.png",
+    "right": "regard_droite.png",
+    "up": "regard_haut.png"
+  },
+  "brows": {
+    "up": "sourcils_leves.png",
+    "down": "sourcils_fronces.png"
+  },
+  "mouthsSmile": {
+    "X": "bouche_X_sourire.png",
+    "B": "bouche_B_sourire.png",
+    "D": "bouche_D_sourire.png"
+  },
+  "smileEmotions": [
+    "enjoué"
+  ],
+  "hands": {
+    "salut": "main_levee.png",
+    "explication": "mains_ouvertes.png",
+    "index": "main_index.png",
+    "approbation": "main_pouce.png"
+  }
 }

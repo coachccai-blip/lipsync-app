@@ -206,13 +206,13 @@ export const DEFAULT_SCENE: SceneConfig = {
     eyeCatch: { color: "#ffffff", intensity: 0.6, position: [0.3, 0.3, 1.4] },
     environment: { enabled: true, intensity: 0.5 },
   },
-  marionnette: { zoom: 1.0, offsetX: 0, offsetY: 0, motion: 1.6, breathing: 0.006, feather: 18, mouthEnergy: 0.08, emotionThreshold: 0.3, mouthSharpness: 2, seuilBruit: 20, lissage: 0.6 },
+  marionnette: { zoom: 1.0, offsetX: 0, offsetY: 0, motion: 1.6, breathing: 0.006, feather: 18, mouthEnergy: 0.08, emotionThreshold: 0.3, mouthSharpness: 2, seuilBruit: 20, lissage: 0.6, suivi: 0.6, ombre: 0.22, regard: true, sourcilsAccent: 0.55, mains: true },
   life: {
     enabled: true,
     blink: { minInterval: 2, maxInterval: 6, duration: 0.16, doubleProbability: 0.15 },
     gaze: { minInterval: 0.8, maxInterval: 3.5, amplitude: 0.25, duration: 0.12 },
     breathing: { period: 4.2, amplitude: 0.8 },
-    head: { amplitude: 2.2, speed: 0.18, nodOnAccent: 1.6 },
+    head: { amplitude: 2.2, speed: 0.18, nodOnAccent: 2, tiltOnQuestion: 2.5 },
     brows: { raiseOnAccent: 0.25, duration: 0.35 },
   },
 };

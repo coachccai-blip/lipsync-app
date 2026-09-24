@@ -113,6 +113,8 @@ export interface LifeConfig {
     speed: number;
     /** Hochement sur les accents, degrés. */
     nodOnAccent: number;
+    /** Inclinaison de la tête (roulis, degrés) à la fin d'une phrase interrogative. */
+    tiltOnQuestion?: number;
   };
   brows: {
     /** Haussement sur les accents (0..1). */
@@ -235,6 +237,16 @@ export interface MarionnetteConfig {
   seuilBruit?: number;
   /** Lissage du grain des images, en pixels de l'image source (0 = aucun). */
   lissage?: number;
+  /** Suivi retardé des cheveux et découplage du buste (0 = rigide, 1 = marqué). */
+  suivi?: number;
+  /** Opacité de l'ombre de contact du personnage sur le fond de bulle (0 = aucune). */
+  ombre?: number;
+  /** Images de regard (saccades visibles) si le manifeste en fournit. */
+  regard?: boolean;
+  /** Images de sourcils sur les accents (seuil 0..1 du haussement, 1 = jamais). */
+  sourcilsAccent?: number;
+  /** Images de mains sur la piste gestes. */
+  mains?: boolean;
   /** Netteté des transitions de bouche (1 = fondu linéaire, 3 = quasi-bascule). */
   mouthSharpness: number;
 }

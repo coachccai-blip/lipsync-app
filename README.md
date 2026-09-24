@@ -198,6 +198,19 @@ Variables d'environnement : `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `AZURE_TT
 6. **Animation** (identique en prévisualisation et en rendu) : bouche (transitions adoucies, anticipation, énergie, exagération, priorité sur les expressions) + expressions (fondu 400 ms, atténuation zone bouche) + vie procédurale (clignements, saccades, respiration, micro-mouvements, sourcils sur accents, tout aléatoire issu de `seed`) + gestes (clips mélangés via `AnimationMixer` piloté par `t`, ou repli procédural).
 7. **Rendu** : Chrome headless (ANGLE ; SwiftShader en repli avec avertissement), `renderFrame(t)` pour `t = n / fps`, capture PNG → ffmpeg sur stdin. Aucun `requestAnimationFrame`, `Date.now` ou `performance.now` dans le chemin de rendu.
 
+### Regard, sourcils, sourire, mains, suivi des cheveux
+
+Douze images optionnelles enrichissent la marionnette (prompts dans `docs/prompts-marionnette-2d-phase1.xlsx`), déclarées dans `marionnette.json` :
+
+- `gaze` (`left`, `right`, `up`) : les saccades du regard calculées par la vie procédurale deviennent visibles (pupilles déplacées), uniquement sur les yeux de base : une émotion garde ses propres yeux, un clignement passe au-dessus.
+- `brows` (`up`, `down`) : sourcils levés sur les accents forts (seuil `marionnette.sourcilsAccent`), froncés à la place pendant une émotion « sérieux ».
+- `mouthsSmile` (mêmes clés Rhubarb, ici X, B, D) : bouches souriantes utilisées pendant les émotions listées dans `smileEmotions` (défaut `enjoué`), les autres formes restent normales.
+- `hands` (clé = nom de geste : `salut`, `explication`, `index`, `approbation`) : la piste gestes devient active en 2D, la main apparaît et disparaît avec le fondu des gestes (`gestures.fadeMs`). `mains_ouvertes` et `pouce` sont des alias.
+
+Chaque calque n'est composé que dans sa zone (yeux seuls, bande des sourcils, bouche, tout le cadre sauf le visage pour les mains) : une image de regard qui aurait aussi changé la bouche, ou une image de main qui aurait changé les sourcils, ne pollue pas le reste. Les images sont détourées sur leur propre couleur de fond (médiane des bords), plus largement là où la base est déjà du fond.
+
+Sans image supplémentaire, la phase « mouvement » ajoute : hochement sur les accents (`life.head.nodOnAccent`), inclinaison de la tête à la fin des phrases interrogatives (`life.head.tiltOnQuestion`, signe alterné), suivi retardé des cheveux et découplage du buste (`marionnette.suivi` : la tête bouge, le buste suit à 40 %, les cheveux traînent de 90 ms), et une ombre de contact du personnage sur le fond de bulle (`marionnette.ombre`).
+
 ### Une image propre, sans grésillement
 
 Les images d'une marionnette générées par IA portent chacune un **grain différent**. Si l'on composait la zone entière de chaque bouche ou de chaque émotion, ce grain changerait à chaque forme de bouche (dix fois par seconde) : c'est le grésillement que l'on voit autour de la bouche et des yeux. Le compositeur ne colle donc que le **vrai changement** :

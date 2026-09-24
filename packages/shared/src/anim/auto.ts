@@ -137,9 +137,9 @@ export function autoTracks(perf: Performance, vocab: AutoVocab, options: AutoOpt
   const gestures: GestureEvent[] = [];
   const emotionAt = (t: number) => expressions.find((x) => t >= x.start && t < x.end)?.emotion ?? "neutre";
   const byEmotion: Record<string, string[]> = {
-    enthousiaste: ["mains_ouvertes", "explication"],
-    enjoué: ["explication", "mains_ouvertes", "acquiescement"],
-    complice: ["index", "acquiescement"],
+    enthousiaste: ["mains_ouvertes", "explication", "approbation"],
+    enjoué: ["explication", "mains_ouvertes", "acquiescement", "approbation"],
+    complice: ["index", "acquiescement", "approbation"],
     surpris: ["haussement_epaules", "mains_ouvertes"],
     sérieux: ["index", "acquiescement", "explication"],
     inquiet: ["haussement_epaules", "reflexion"],

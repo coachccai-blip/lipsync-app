@@ -35,7 +35,7 @@ export interface LoadReport {
   software: boolean;
   warnings: string[];
   modelHeight: number;
-  marionnette?: { mouths: string[]; eyes: string[]; emotions: string[]; regions: { mouth: { x: number; y: number; w: number; h: number }; eyes: { x: number; y: number; w: number; h: number } }; size: [number, number] };
+  marionnette?: { mouths: string[]; eyes: string[]; emotions: string[]; gaze?: string[]; brows?: string[]; smiles?: string[]; hands?: string[]; regions: { mouth: { x: number; y: number; w: number; h: number }; eyes: { x: number; y: number; w: number; h: number } }; size: [number, number] };
 }
 
 declare global {

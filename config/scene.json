@@ -113,7 +113,8 @@
     "head": {
       "amplitude": 2.2,
       "speed": 0.18,
-      "nodOnAccent": 1.6
+      "nodOnAccent": 2,
+      "tiltOnQuestion": 2.5
     },
     "brows": {
       "raiseOnAccent": 0.25,
@@ -131,6 +132,11 @@
     "emotionThreshold": 0.3,
     "mouthSharpness": 2,
     "seuilBruit": 20,
-    "lissage": 0.6
+    "lissage": 0.6,
+    "suivi": 0.6,
+    "ombre": 0.22,
+    "regard": true,
+    "sourcilsAccent": 0.55,
+    "mains": true
   }
 }

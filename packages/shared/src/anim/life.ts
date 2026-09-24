@@ -97,6 +97,10 @@ export function gazeAt(t: number, gazes: GazeTarget[], saccadeDuration: number):
 export interface LifeState {
   morphs: MorphWeights;
   bones: BoneRotations;
+  /** Regard (-1..1, x vers la droite de l'image, y vers le haut). */
+  gaze: { x: number; y: number };
+  /** Haussement de sourcils sur accent (0..1). */
+  brow: number;
 }
 
 /**
@@ -106,7 +110,7 @@ export interface LifeState {
 export function lifeAt(t: number, schedule: LifeSchedule, cfg: LifeConfig, accents: number[]): LifeState {
   const morphs: MorphWeights = {};
   const bones: BoneRotations = {};
-  if (!cfg.enabled) return { morphs, bones };
+  if (!cfg.enabled) return { morphs, bones, gaze: { x: 0, y: 0 }, brow: 0 };
 
   const blink = blinkAt(t, schedule.blinks, cfg.blink.duration);
   if (blink > 0) {
@@ -162,5 +166,5 @@ export function lifeAt(t: number, schedule: LifeSchedule, cfg: LifeConfig, accen
   bones.spine2 = [-cfg.breathing.amplitude * 0.5 * (breath + 1), 0, 0];
 
   for (const k in morphs) morphs[k] = clamp(morphs[k]);
-  return { morphs, bones };
+  return { morphs, bones, gaze, brow };
 }

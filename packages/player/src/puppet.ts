@@ -14,6 +14,15 @@ export interface PuppetManifest {
   mouths: Record<string, string>;
   eyes?: { half?: string; closed?: string };
   emotions?: Record<string, string>;
+  /** Regard : pupilles déplacées (left / right = côté de l'image, up). */
+  gaze?: { left?: string; right?: string; up?: string; down?: string };
+  /** Sourcils seuls : levés (accents, questions) et froncés (insistance). */
+  brows?: { up?: string; down?: string };
+  /** Bouches souriantes, mêmes clés Rhubarb, utilisées pendant les émotions listées dans smileEmotions. */
+  mouthsSmile?: Record<string, string>;
+  smileEmotions?: string[];
+  /** Mains : clé = nom de geste de la piste gestes (salut, explication, index, approbation…). */
+  hands?: Record<string, string>;
   /** Couleur de fond à rendre transparente ("auto" = coins de l'image, null = conserver). */
   keyColor?: string | "auto" | null;
   keyTolerance?: number;
@@ -60,13 +69,17 @@ export function cornerColor(data: Uint8ClampedArray, w: number, h: number): [num
 }
 
 /** Rend transparent ce qui est proche de la couleur de fond (bords adoucis). */
-export function keyOut(img: ImageData, key: [number, number, number], tolerance: number): void {
+export function keyOut(img: ImageData, key: [number, number, number], tolerance: number, loose?: { alpha: Uint8ClampedArray; tolerance: number }): void {
   const d = img.data;
   const t0 = tolerance * 0.5 * 255;
   const t1 = tolerance * 1.5 * 255;
+  const l0 = (loose?.tolerance ?? tolerance) * 0.5 * 255;
+  const l1 = (loose?.tolerance ?? tolerance) * 1.5 * 255;
   for (let i = 0; i < d.length; i += 4) {
     const dist = Math.max(Math.abs(d[i] - key[0]), Math.abs(d[i + 1] - key[1]), Math.abs(d[i + 2] - key[2]));
-    const a = smoothstep((dist - t0) / (t1 - t0));
+    // là où la base est déjà du fond, on détoure plus largement (fond légèrement différent d'une image à l'autre)
+    const isBg = loose ? loose.alpha[i + 3] < 128 : false;
+    const a = isBg ? smoothstep((dist - l0) / (l1 - l0)) : smoothstep((dist - t0) / (t1 - t0));
     d[i + 3] = Math.round(d[i + 3] * a);
   }
 }
@@ -254,6 +267,57 @@ function makeLayer(img: ImageData, rect: Rect, feather: number, change?: Float32
   return { canvas: c, rect };
 }
 
+function clipRect(r: Rect, within: Rect): Rect {
+  const x = Math.max(r.x, within.x);
+  const y = Math.max(r.y, within.y);
+  const x2 = Math.min(r.x + r.w, within.x + within.w);
+  const y2 = Math.min(r.y + r.h, within.y + within.h);
+  return { x, y, w: Math.max(1, x2 - x), h: Math.max(1, y2 - y) };
+}
+
+/** Met à zéro un masque dans des rectangles (avec un fondu de 24 px autour). */
+export function excludeRects(mask: Float32Array, rect: Rect, exclusions: Rect[]): Float32Array {
+  const out = new Float32Array(mask);
+  const fade = 24;
+  for (const ex of exclusions) {
+    const x0 = Math.max(rect.x, ex.x - fade);
+    const y0 = Math.max(rect.y, ex.y - fade);
+    const x1 = Math.min(rect.x + rect.w, ex.x + ex.w + fade);
+    const y1 = Math.min(rect.y + rect.h, ex.y + ex.h + fade);
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const dEdge = Math.min(x - (ex.x - fade), y - (ex.y - fade), ex.x + ex.w + fade - 1 - x, ex.y + ex.h + fade - 1 - y);
+        const keep = dEdge >= fade ? 0 : 1 - smoothstep(Math.max(0, dEdge) / fade);
+        const k = (y - rect.y) * rect.w + (x - rect.x);
+        out[k] *= keep;
+      }
+    }
+  }
+  return out;
+}
+
+/** Copie d'un canvas avec une alpha verticale : 1 sur [y0, y1], fondu jusqu'à 0 à y0 - f et y1 + f. */
+function verticalBand(src: HTMLCanvasElement, y0: number, y1: number, f: number): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = src.width;
+  c.height = src.height;
+  const ctx = c.getContext("2d")!;
+  ctx.drawImage(src, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, src.height);
+  const stop = (y: number) => Math.min(1, Math.max(0, y / src.height));
+  g.addColorStop(0, y0 - f <= 0 ? "rgba(0,0,0,1)" : "rgba(0,0,0,0)");
+  if (y0 - f > 0) g.addColorStop(stop(y0 - f), "rgba(0,0,0,0)");
+  g.addColorStop(stop(y0), "rgba(0,0,0,1)");
+  g.addColorStop(stop(y1), "rgba(0,0,0,1)");
+  if (y1 + f < src.height) g.addColorStop(stop(y1 + f), "rgba(0,0,0,0)");
+  g.addColorStop(1, y1 + f >= src.height ? "rgba(0,0,0,1)" : "rgba(0,0,0,0)");
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, src.width, src.height);
+  ctx.globalCompositeOperation = "source-over";
+  return c;
+}
+
 /**
  * Marionnette 2D : image de base + calques de bouches (formes Rhubarb), d'yeux (clignement)
  * et d'émotions (sourcils et yeux), tous découpés dans des images alignées sur la base.
@@ -263,9 +327,18 @@ export class Puppet {
   height = 0;
   base!: HTMLCanvasElement;
   mouths = new Map<string, Layer>();
+  mouthsSmile = new Map<string, Layer>();
+  smileEmotions = new Set<string>(["enjoué"]);
   eyes: { half?: Layer; closed?: Layer } = {};
   emotions = new Map<string, Layer>();
-  regions!: { mouth: Rect; eyes: Rect };
+  gaze = new Map<string, Layer>();
+  brows = new Map<string, Layer>();
+  hands = new Map<string, Layer>();
+  regions!: { mouth: Rect; eyes: Rect; eyesOnly?: Rect; brows?: Rect };
+  /** Bandes du personnage pour le suivi retardé (construites par rebuild). */
+  private bands?: { torso: HTMLCanvasElement; head: HTMLCanvasElement; hair: HTMLCanvasElement; neckY: number; hairY: number };
+  private shadow?: HTMLCanvasElement;
+  private keyed = false;
   report!: LoadReport;
   private images = new Map<string, ImageData>();
   private feather = 0;
@@ -283,6 +356,11 @@ export class Puppet {
     if (manifest.eyes?.half) entries.push(["eyes:half", manifest.eyes.half]);
     if (manifest.eyes?.closed) entries.push(["eyes:closed", manifest.eyes.closed]);
     for (const [k, f] of Object.entries(manifest.emotions ?? {})) entries.push([`emotion:${k}`, f]);
+    for (const [k, f] of Object.entries(manifest.gaze ?? {})) if (f) entries.push([`gaze:${k}`, f]);
+    for (const [k, f] of Object.entries(manifest.brows ?? {})) if (f) entries.push([`brow:${k}`, f]);
+    for (const [k, f] of Object.entries(manifest.mouthsSmile ?? {})) entries.push([`smile:${k}`, f]);
+    for (const [k, f] of Object.entries(manifest.hands ?? {})) entries.push([`hand:${k}`, f]);
+    if (manifest.smileEmotions) p.smileEmotions = new Set(manifest.smileEmotions);
     const loaded = await Promise.all(
       entries.map(async ([key, file]) => {
         try {
@@ -310,7 +388,7 @@ export class Puppet {
     let mouthRect: Rect | null = manifest.regions?.mouth ?? null;
     let eyesRect: Rect | null = manifest.regions?.eyes ?? null;
     if (!mouthRect) {
-      for (const [k, d] of p.images) if (k.startsWith("mouth:")) mouthRect = unionRect(mouthRect, diffRect(bd, d.data, p.width, p.height));
+      for (const [k, d] of p.images) if (k.startsWith("mouth:") || k.startsWith("smile:")) mouthRect = unionRect(mouthRect, diffRect(bd, d.data, p.width, p.height));
       if (!mouthRect) {
         mouthRect = { x: Math.round(p.width * 0.35), y: Math.round(p.height * 0.55), w: Math.round(p.width * 0.3), h: Math.round(p.height * 0.18) };
         warnings.push("zone de la bouche non détectée (images identiques à la base ?) : zone par défaut");
@@ -325,13 +403,34 @@ export class Puppet {
     }
     // la zone des yeux ne doit pas mordre sur la bouche
     if (eyesRect.y + eyesRect.h > mouthRect.y) eyesRect.h = Math.max(10, mouthRect.y - eyesRect.y - 2);
-    p.regions = { mouth: mouthRect, eyes: eyesRect };
+    // yeux seuls (paupières et pupilles, sans sourcils) : d'après les images de clignement
+    let eyesOnly: Rect | null = null;
+    for (const [k, d] of p.images) if (k.startsWith("eyes:")) eyesOnly = unionRect(eyesOnly, diffRect(bd, d.data, p.width, p.height, mouthRect));
+    if (eyesOnly) eyesOnly = clipRect(eyesOnly, eyesRect);
+    // sourcils : au-dessus des yeux seuls, d'après les images de sourcils et d'émotions
+    let browsRect: Rect | null = null;
+    if (eyesOnly) {
+      for (const [k, d] of p.images) if (k.startsWith("brow:") || k.startsWith("emotion:")) browsRect = unionRect(browsRect, diffRect(bd, d.data, p.width, p.height, mouthRect));
+      if (browsRect) {
+        const bottom = eyesOnly.y - 2; // strictement au-dessus des yeux : ces images changent parfois aussi les yeux
+        browsRect = { x: browsRect.x, y: browsRect.y, w: browsRect.w, h: Math.max(0, bottom - browsRect.y) };
+        if (browsRect.h < 8) browsRect = null;
+      }
+    }
+    p.regions = { mouth: mouthRect, eyes: eyesRect, eyesOnly: eyesOnly ?? undefined, brows: browsRect ?? undefined };
 
     // fond transparent
     if (manifest.keyColor !== null && manifest.keyColor !== undefined) {
-      const key = manifest.keyColor === "auto" ? cornerColor(bd, p.width, p.height) : hexToRgb(manifest.keyColor);
+      // en mode auto, chaque image est détourée sur SA couleur de coins : les images générées
+      // n'ont pas toutes exactement le même fond
       const tol = manifest.keyTolerance ?? 0.12;
-      for (const d of p.images.values()) keyOut(d, key, tol);
+      const keyFor = (d: ImageData) => (manifest.keyColor === "auto" ? cornerColor(d.data, p.width, p.height) : hexToRgb(manifest.keyColor as string));
+      keyOut(baseData, keyFor(baseData), tol);
+      for (const [k, d] of p.images) {
+        if (k === "base") continue;
+        keyOut(d, keyFor(d), tol, { alpha: baseData.data, tolerance: Math.max(tol, 0.26) });
+      }
+      p.keyed = true;
     }
     p.rebuild(cfg.feather, cfg.seuilBruit ?? 0, cfg.lissage ?? 0);
     p.report = {
@@ -356,6 +455,10 @@ export class Puppet {
         mouths: [...p.mouths.keys()],
         eyes: Object.keys(p.eyes),
         emotions: [...p.emotions.keys()],
+        gaze: [...p.gaze.keys()],
+        brows: [...p.brows.keys()],
+        smiles: [...p.mouthsSmile.keys()],
+        hands: [...p.hands.keys()],
         regions: p.regions,
         size: [p.width, p.height],
       },
@@ -388,17 +491,73 @@ export class Puppet {
     this.mouths.clear();
     this.emotions.clear();
     this.eyes = {};
+    this.mouthsSmile.clear();
+    this.gaze.clear();
+    this.brows.clear();
+    this.hands.clear();
     const entries = [...this.images].filter(([k]) => k !== "base");
-    const mouthImages = entries.filter(([k]) => k.startsWith("mouth:")).map(([, d]) => d.data);
-    const eyeImages = entries.filter(([k]) => k.startsWith("eyes:") || k.startsWith("emotion:")).map(([, d]) => d.data);
+    const pick = (prefix: string) => entries.filter(([k]) => k.startsWith(prefix)).map(([, d]) => d.data);
+    const mouthImages = [...pick("mouth:"), ...pick("smile:")];
+    const eyeImages = [...pick("eyes:"), ...pick("emotion:")];
     const mouthMask = gate > 0 ? groupMask(mouthImages, baseData.data, this.width, mouthRect, gate) : undefined;
     const eyesMask = gate > 0 ? groupMask(eyeImages, baseData.data, this.width, eyesRect, gate) : undefined;
+    // regard : zone des yeux seuls (les images de regard changent parfois aussi sourcils ou bouche, ignorés)
+    const eyesOnly = this.regions.eyesOnly ? padRect(this.regions.eyesOnly, Math.round(feather), this.width, this.height) : undefined;
+    const gazeMask = eyesOnly && gate > 0 ? groupMask([...pick("gaze:"), ...pick("eyes:")], baseData.data, this.width, eyesOnly, gate) : undefined;
+    // sourcils seuls : bande au-dessus des yeux
+    const browsRect = this.regions.brows ? padRect(this.regions.brows, Math.round(feather), this.width, this.height) : undefined;
+    const browsMask = browsRect && gate > 0 ? groupMask([...pick("brow:"), ...pick("emotion:")], baseData.data, this.width, browsRect, gate) : undefined;
+    // mains : tout le cadre, sauf le visage (yeux, sourcils, bouche) que ces images modifient parfois aussi
+    const full: Rect = { x: 0, y: 0, w: this.width, h: this.height };
+    const faceExclusion = [mouthRect, eyesRect, browsRect].filter((r): r is Rect => Boolean(r)).map((r) => padRect(r, 40, this.width, this.height));
     for (const [k, d] of entries) {
       if (k.startsWith("mouth:")) this.mouths.set(k.slice(6), makeLayer(d, mouthRect, feather, mouthMask, smoothing));
+      else if (k.startsWith("smile:")) this.mouthsSmile.set(k.slice(6), makeLayer(d, mouthRect, feather, mouthMask, smoothing));
       else if (k === "eyes:half") this.eyes.half = makeLayer(d, eyesRect, feather, eyesMask, smoothing);
       else if (k === "eyes:closed") this.eyes.closed = makeLayer(d, eyesRect, feather, eyesMask, smoothing);
       else if (k.startsWith("emotion:")) this.emotions.set(k.slice(8), makeLayer(d, eyesRect, feather, eyesMask, smoothing));
+      else if (k.startsWith("gaze:") && eyesOnly) this.gaze.set(k.slice(5), makeLayer(d, eyesOnly, feather, gazeMask, smoothing));
+      else if (k.startsWith("brow:") && browsRect) this.brows.set(k.slice(5), makeLayer(d, browsRect, feather, browsMask, smoothing));
+      else if (k.startsWith("hand:")) {
+        let mask = changeMask(d.data, baseData.data, this.width, full, Math.max(12, gate));
+        mask = excludeRects(mask, full, faceExclusion);
+        this.hands.set(k.slice(5), makeLayer(d, full, 0, mask, smoothing));
+      }
     }
+    this.buildBands(mouthRect, browsRect ?? eyesRect);
+    this.buildShadow();
+  }
+
+  /** Bandes buste / tête / cheveux pour le suivi retardé. */
+  private buildBands(mouthRect: Rect, browsRect: Rect): void {
+    const neckY = Math.min(this.height - 1, mouthRect.y + mouthRect.h + Math.round(this.height * 0.06));
+    const hairY = Math.max(1, browsRect.y - Math.round(this.height * 0.02));
+    const f = Math.round(this.height * 0.06);
+    this.bands = {
+      torso: verticalBand(this.base, neckY + Math.round(f * 0.5), this.height, f),
+      head: verticalBand(this.base, 0, neckY + Math.round(f * 0.5), f),
+      hair: verticalBand(this.base, 0, hairY, f),
+      neckY,
+      hairY,
+    };
+  }
+
+  /** Silhouette floue du personnage (ombre de contact), seulement si le fond a été détouré. */
+  private buildShadow(): void {
+    this.shadow = undefined;
+    if (!this.keyed) return;
+    const c = document.createElement("canvas");
+    c.width = this.width;
+    c.height = this.height;
+    const ctx = c.getContext("2d")!;
+    ctx.filter = `blur(${Math.round(this.width * 0.02)}px)`;
+    ctx.drawImage(this.base, 0, 0);
+    ctx.filter = "none";
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.globalCompositeOperation = "source-over";
+    this.shadow = c;
   }
 
   /** Dessine l'image t dans un contexte 2D carré de diamètre `d`. */
@@ -408,55 +567,121 @@ export class Puppet {
     const head = frame.bones.head ?? [0, 0, 0];
     const breath = frame.bones.spine1?.[0] ?? 0; // degrés, <= 0
     const s = scale * (1 + cfg.breathing * Math.min(1, -breath / 0.8));
-    ctx.save();
-    ctx.translate(d / 2 + cfg.offsetX * d + head[1] * cfg.motion * scale, d / 2 + cfg.offsetY * d + head[0] * cfg.motion * 0.6 * scale);
-    ctx.rotate((head[2] * 0.4 * Math.PI) / 180);
-    ctx.scale(s, s);
-    ctx.translate(-this.width / 2, -this.height / 2);
-    ctx.drawImage(this.base, 0, 0);
+    const suivi = Math.max(0, Math.min(1, cfg.suivi ?? 0));
+    const tx = head[1] * cfg.motion * scale;
+    const ty = head[0] * cfg.motion * 0.6 * scale;
+    const rot = (head[2] * 0.4 * Math.PI) / 180;
+    const cx = d / 2 + cfg.offsetX * d;
+    const cy = d / 2 + cfg.offsetY * d;
+    // transformations : buste (mouvement réduit), tête (complet), cheveux (tête + retard)
+    const lag = frame.headLag ?? [0, 0, 0];
+    const lagX = -lag[1] * cfg.motion * scale * 1.6 * suivi;
+    const lagY = -lag[0] * cfg.motion * 0.6 * scale * 1.6 * suivi;
+    const torsoK = 1 - 0.6 * suivi;
+    const withTransform = (dx: number, dy: number, r: number, fn: () => void) => {
+      ctx.save();
+      ctx.translate(cx + dx, cy + dy);
+      ctx.rotate(r);
+      ctx.scale(s, s);
+      ctx.translate(-this.width / 2, -this.height / 2);
+      fn();
+      ctx.restore();
+    };
+    const drawHead = (fn: () => void) => withTransform(tx, ty, rot, fn);
+    const drawTorso = (fn: () => void) => withTransform(tx * torsoK, ty * torsoK, rot * torsoK, fn);
 
-    // bouche : transition courte entre formes, rendue plus franche par une courbe de contraste
-    const e = energyAt(frame.t, energy);
-    const stretch = 1 + cfg.mouthEnergy * (e - 0.5) * 2 * frame.speaking;
-    const sharp = Math.max(1, cfg.mouthSharpness ?? 2);
-    const active = Object.entries(frame.shapes).filter(([shape, w]) => shape !== "X" && w > 0.002);
-    let total = 0;
-    const weights = active.map(([shape, w]) => {
-      const ws = Math.pow(w, sharp);
-      total += ws;
-      return [shape, ws] as const;
-    });
-    const rest = Math.max(0, 1 - active.reduce((acc, [, w]) => acc + w, 0));
-    const restSharp = Math.pow(rest, sharp);
-    const norm = total + restSharp > 0 ? 1 / (total + restSharp) : 1;
-    // composition « over » en ordre croissant : chaque forme finit avec la couverture voulue
-    let covered = restSharp * norm;
-    for (const [shape, ws] of [...weights].sort((a, b) => a[1] - b[1])) {
-      const layer = this.mouths.get(shape) ?? this.mouths.get(FALLBACK[shape] ?? "");
-      const target = ws * norm;
-      covered += target;
-      if (!layer || target < 0.01) continue;
-      ctx.globalAlpha = Math.min(1, target / covered);
-      const r = layer.rect;
-      const cy = r.y + r.h / 2;
-      ctx.drawImage(layer.canvas, r.x, cy - (r.h / 2) * stretch, r.w, r.h * stretch);
-    }
-    // yeux : une seule image d'émotion, changée pendant un clignement (jamais mélangée)
-    const emotionLayer = frame.emotionDisplayed ? this.emotions.get(frame.emotionDisplayed) : undefined;
-    if (emotionLayer) {
+    // ombre de contact
+    const ombre = cfg.ombre ?? 0;
+    if (this.shadow && ombre > 0) {
+      ctx.globalAlpha = ombre;
+      withTransform(tx * torsoK, ty * torsoK + d * 0.012, rot * torsoK, () => ctx.drawImage(this.shadow!, 0, 0));
       ctx.globalAlpha = 1;
-      ctx.drawImage(emotionLayer.canvas, emotionLayer.rect.x, emotionLayer.rect.y);
     }
-    // clignement par paliers nets : ouvert, mi-clos, fermé
-    const blink = frame.blink;
-    const closedLayer = this.eyes.closed ?? this.eyes.half;
-    const halfLayer = this.eyes.half;
-    ctx.globalAlpha = 1;
-    if (blink >= 0.7 && closedLayer) ctx.drawImage(closedLayer.canvas, closedLayer.rect.x, closedLayer.rect.y);
-    else if (blink >= 0.3 && halfLayer) ctx.drawImage(halfLayer.canvas, halfLayer.rect.x, halfLayer.rect.y);
-    else if (blink >= 0.5 && closedLayer) ctx.drawImage(closedLayer.canvas, closedLayer.rect.x, closedLayer.rect.y);
-    ctx.globalAlpha = 1;
-    ctx.restore();
+
+    // corps
+    if (this.bands && suivi > 0) {
+      drawTorso(() => ctx.drawImage(this.bands!.torso, 0, 0));
+      drawHead(() => ctx.drawImage(this.bands!.head, 0, 0));
+      withTransform(tx + lagX, ty + lagY, rot, () => ctx.drawImage(this.bands!.hair, 0, 0));
+    } else drawHead(() => ctx.drawImage(this.base, 0, 0));
+
+    // mains : piste gestes, fondu d'entrée / sortie, sous les calques du visage
+    const gesture = frame.gesture;
+    if (cfg.mains !== false && gesture && gesture.weight > 0.01) {
+      const layer = this.hands.get(gesture.clip) ?? this.hands.get(HAND_ALIASES[gesture.clip] ?? "");
+      if (layer) {
+        ctx.globalAlpha = gesture.weight;
+        drawTorso(() => ctx.drawImage(layer.canvas, layer.rect.x, layer.rect.y));
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    drawHead(() => {
+      // bouche : transition courte entre formes, rendue plus franche par une courbe de contraste
+      const e = energyAt(frame.t, energy);
+      const stretch = 1 + cfg.mouthEnergy * (e - 0.5) * 2 * frame.speaking;
+      const sharp = Math.max(1, cfg.mouthSharpness ?? 2);
+      const smiling = frame.emotionDisplayed !== undefined && this.smileEmotions.has(frame.emotionDisplayed) && this.mouthsSmile.size > 0;
+      const mouthLayer = (shape: string): Layer | undefined => (smiling ? this.mouthsSmile.get(shape) : undefined) ?? this.mouths.get(shape) ?? this.mouths.get(FALLBACK[shape] ?? "");
+      const active = Object.entries(frame.shapes).filter(([shape, w]) => shape !== "X" && w > 0.002);
+      let total = 0;
+      const weights = active.map(([shape, w]) => {
+        const ws = Math.pow(w, sharp);
+        total += ws;
+        return [shape, ws] as const;
+      });
+      const rest = Math.max(0, 1 - active.reduce((acc, [, w]) => acc + w, 0));
+      const restSharp = Math.pow(rest, sharp);
+      const norm = total + restSharp > 0 ? 1 / (total + restSharp) : 1;
+      // composition « over » en ordre croissant : chaque forme finit avec la couverture voulue
+      let covered = restSharp * norm;
+      // bouche au repos souriante pendant une émotion souriante
+      const restLayer = smiling ? this.mouthsSmile.get("X") : undefined;
+      if (restLayer && restSharp * norm > 0.01) {
+        ctx.globalAlpha = 1;
+        ctx.drawImage(restLayer.canvas, restLayer.rect.x, restLayer.rect.y);
+      }
+      for (const [shape, ws] of [...weights].sort((a, b) => a[1] - b[1])) {
+        const layer = mouthLayer(shape);
+        const target = ws * norm;
+        covered += target;
+        if (!layer || target < 0.01) continue;
+        ctx.globalAlpha = Math.min(1, target / covered);
+        const r = layer.rect;
+        const my = r.y + r.h / 2;
+        ctx.drawImage(layer.canvas, r.x, my - (r.h / 2) * stretch, r.w, r.h * stretch);
+      }
+      ctx.globalAlpha = 1;
+      // yeux : une seule image d'émotion, changée pendant un clignement (jamais mélangée)
+      const emotionLayer = frame.emotionDisplayed ? this.emotions.get(frame.emotionDisplayed) : undefined;
+      if (emotionLayer) ctx.drawImage(emotionLayer.canvas, emotionLayer.rect.x, emotionLayer.rect.y);
+      // regard : pupilles déplacées, seulement sur les yeux de base (une émotion garde ses propres yeux)
+      const blink = frame.blink;
+      if (cfg.regard !== false && !emotionLayer && frame.gaze && blink < 0.3) {
+        const g = frame.gaze;
+        let key: string | undefined;
+        if (g.y > 0.28 && this.gaze.has("up")) key = "up";
+        else if (g.y < -0.28 && this.gaze.has("down")) key = "down";
+        else if (g.x > 0.22 && this.gaze.has("right")) key = "right";
+        else if (g.x < -0.22 && this.gaze.has("left")) key = "left";
+        const layer = key ? this.gaze.get(key) : undefined;
+        if (layer) ctx.drawImage(layer.canvas, layer.rect.x, layer.rect.y);
+      }
+      // sourcils sur les accents : levés (ou froncés pendant une émotion sérieuse)
+      const browThreshold = cfg.sourcilsAccent ?? 0.55;
+      if ((frame.brow ?? 0) >= browThreshold && browThreshold < 1) {
+        const key = frame.emotionDisplayed === "sérieux" && this.brows.has("down") ? "down" : "up";
+        const layer = this.brows.get(key);
+        if (layer) ctx.drawImage(layer.canvas, layer.rect.x, layer.rect.y);
+      }
+      // clignement par paliers nets : ouvert, mi-clos, fermé
+      const closedLayer = this.eyes.closed ?? this.eyes.half;
+      const halfLayer = this.eyes.half;
+      if (blink >= 0.7 && closedLayer) ctx.drawImage(closedLayer.canvas, closedLayer.rect.x, closedLayer.rect.y);
+      else if (blink >= 0.3 && halfLayer) ctx.drawImage(halfLayer.canvas, halfLayer.rect.x, halfLayer.rect.y);
+      else if (blink >= 0.5 && closedLayer) ctx.drawImage(closedLayer.canvas, closedLayer.rect.x, closedLayer.rect.y);
+      ctx.globalAlpha = 1;
+    });
   }
 }
 
@@ -468,6 +693,16 @@ function hexToRgb(hex: string): [number, number, number] {
   if (!m) return [0, 0, 0];
   return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
 }
+
+/** Noms de gestes de la piste → clé d'image de main du manifeste. */
+const HAND_ALIASES: Record<string, string> = {
+  mains_ouvertes: "explication",
+  explication: "explication",
+  salut: "salut",
+  index: "index",
+  approbation: "approbation",
+  pouce: "approbation",
+};
 
 /** Scène 2D de la marionnette : un canvas dans la bulle, mêmes réglages de page que la scène 3D. */
 export class PuppetStage {

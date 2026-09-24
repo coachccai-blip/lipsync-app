@@ -654,6 +654,79 @@
           "bones": {}
         }
       ]
+    },
+    "approbation": {
+      "duration": 1.6,
+      "keyframes": [
+        {
+          "t": 0,
+          "bones": {}
+        },
+        {
+          "t": 0.4,
+          "bones": {
+            "rightArm": [
+              -6,
+              40,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -70
+            ],
+            "rightHand": [
+              0,
+              0,
+              25
+            ]
+          }
+        },
+        {
+          "t": 0.6,
+          "bones": {
+            "rightArm": [
+              -8,
+              44,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -62
+            ],
+            "rightHand": [
+              0,
+              0,
+              25
+            ]
+          }
+        },
+        {
+          "t": 1.0,
+          "bones": {
+            "rightArm": [
+              -6,
+              40,
+              0
+            ],
+            "rightForeArm": [
+              0,
+              0,
+              -70
+            ],
+            "rightHand": [
+              0,
+              0,
+              25
+            ]
+          }
+        },
+        {
+          "t": 1.6,
+          "bones": {}
+        }
+      ]
     }
   }
 }
