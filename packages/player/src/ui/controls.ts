@@ -67,7 +67,7 @@ export const SECTIONS: SectionSpec[] = [
       { path: "scene.marionnette.regard", label: "Images de regard (saccades)", type: "checkbox" },
       { path: "scene.marionnette.sourcilsAccent", label: "Sourcils sur accents (seuil, 1 = jamais)", type: "range", min: 0.2, max: 1, step: 0.05 },
       { path: "scene.marionnette.mains", label: "Images de mains (piste gestes)", type: "checkbox" },
-      { path: "scene.marionnette.mouthSharpness", label: "Netteté des transitions de bouche", type: "range", min: 1, max: 4, step: 0.1 },
+      { path: "scene.marionnette.mouthSharpness", label: "Transitions de bouche (4 = bascule nette, jamais deux bouches)", type: "range", min: 1, max: 4, step: 0.1 },
       { path: "scene.marionnette.emotionThreshold", label: "Intensité minimale pour afficher une émotion", type: "range", min: 0, max: 1, step: 0.05 },
     ],
   },

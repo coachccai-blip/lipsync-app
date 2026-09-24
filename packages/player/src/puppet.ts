@@ -412,8 +412,11 @@ export class Puppet {
     if (eyesOnly) {
       for (const [k, d] of p.images) if (k.startsWith("brow:") || k.startsWith("emotion:")) browsRect = unionRect(browsRect, diffRect(bd, d.data, p.width, p.height, mouthRect));
       if (browsRect) {
-        const bottom = eyesOnly.y - 2; // strictement au-dessus des yeux : ces images changent parfois aussi les yeux
-        browsRect = { x: browsRect.x, y: browsRect.y, w: browsRect.w, h: Math.max(0, bottom - browsRect.y) };
+        // nettement au-dessus des yeux : ces images changent parfois aussi les yeux (plus grands ouverts) ;
+        // et large vers le haut : des sourcils levés dépassent la détection par blocs
+        const bottom = eyesOnly.y - 2;
+        const top = Math.max(0, browsRect.y - eyesOnly.h);
+        browsRect = { x: browsRect.x, y: top, w: browsRect.w, h: Math.max(0, bottom - top) };
         if (browsRect.h < 8) browsRect = null;
       }
     }
@@ -507,6 +510,18 @@ export class Puppet {
     // sourcils seuls : bande au-dessus des yeux
     const browsRect = this.regions.brows ? padRect(this.regions.brows, Math.round(feather), this.width, this.height) : undefined;
     const browsMask = browsRect && gate > 0 ? groupMask([...pick("brow:"), ...pick("emotion:")], baseData.data, this.width, browsRect, gate) : undefined;
+    // une image de sourcils change parfois aussi les yeux (plus grands ouverts) : ce qu'elle
+    // modifie dans la zone des yeux est retiré de son masque, la base reste visible là
+    const browMaskFor = (img: Uint8ClampedArray): Float32Array | undefined => {
+      if (!browsMask || !browsRect || !this.regions.eyesOnly) return browsMask;
+      const eyeTop = this.regions.eyesOnly.y - Math.round(this.regions.eyesOnly.h * 0.2);
+      const core = changeCore(img, baseData.data, this.width, browsRect, Math.max(12, gate));
+      for (let y = 0; y < browsRect.h; y++) if (browsRect.y + y < eyeTop) core.fill(0, y * browsRect.w, (y + 1) * browsRect.w);
+      const eyeZone = boxBlur(dilate(core, browsRect.w, browsRect.h, 2), browsRect.w, browsRect.h, 3);
+      const out = new Float32Array(browsMask);
+      for (let i = 0; i < out.length; i++) out[i] *= 1 - Math.min(1, eyeZone[i]);
+      return out;
+    };
     // mains : tout le cadre, sauf le visage (yeux, sourcils, bouche) que ces images modifient parfois aussi
     const full: Rect = { x: 0, y: 0, w: this.width, h: this.height };
     const faceExclusion = [mouthRect, eyesRect, browsRect].filter((r): r is Rect => Boolean(r)).map((r) => padRect(r, 40, this.width, this.height));
@@ -517,7 +532,7 @@ export class Puppet {
       else if (k === "eyes:closed") this.eyes.closed = makeLayer(d, eyesRect, feather, eyesMask, smoothing);
       else if (k.startsWith("emotion:")) this.emotions.set(k.slice(8), makeLayer(d, eyesRect, feather, eyesMask, smoothing));
       else if (k.startsWith("gaze:") && eyesOnly) this.gaze.set(k.slice(5), makeLayer(d, eyesOnly, feather, gazeMask, smoothing));
-      else if (k.startsWith("brow:") && browsRect) this.brows.set(k.slice(5), makeLayer(d, browsRect, feather, browsMask, smoothing));
+      else if (k.startsWith("brow:") && browsRect) this.brows.set(k.slice(5), makeLayer(d, browsRect, feather, browMaskFor(d.data), smoothing));
       else if (k.startsWith("hand:")) {
         let mask = changeMask(d.data, baseData.data, this.width, full, Math.max(12, gate));
         mask = excludeRects(mask, full, faceExclusion);
@@ -620,7 +635,8 @@ export class Puppet {
       // bouche : transition courte entre formes, rendue plus franche par une courbe de contraste
       const e = energyAt(frame.t, energy);
       const stretch = 1 + cfg.mouthEnergy * (e - 0.5) * 2 * frame.speaking;
-      const sharp = Math.max(1, cfg.mouthSharpness ?? 2);
+      const sharp = Math.max(1, cfg.mouthSharpness ?? 4);
+      const hardSwitch = sharp >= 3.5; // une seule bouche à la fois : jamais deux images superposées
       const smiling = frame.emotionDisplayed !== undefined && this.smileEmotions.has(frame.emotionDisplayed) && this.mouthsSmile.size > 0;
       const mouthLayer = (shape: string): Layer | undefined => (smiling ? this.mouthsSmile.get(shape) : undefined) ?? this.mouths.get(shape) ?? this.mouths.get(FALLBACK[shape] ?? "");
       const active = Object.entries(frame.shapes).filter(([shape, w]) => shape !== "X" && w > 0.002);
@@ -633,15 +649,27 @@ export class Puppet {
       const rest = Math.max(0, 1 - active.reduce((acc, [, w]) => acc + w, 0));
       const restSharp = Math.pow(rest, sharp);
       const norm = total + restSharp > 0 ? 1 / (total + restSharp) : 1;
-      // composition « over » en ordre croissant : chaque forme finit avec la couverture voulue
-      let covered = restSharp * norm;
       // bouche au repos souriante pendant une émotion souriante
       const restLayer = smiling ? this.mouthsSmile.get("X") : undefined;
-      if (restLayer && restSharp * norm > 0.01) {
+      if (hardSwitch) {
+        // bascule nette : la forme dominante seule (ou le repos), opaque
+        const top = weights.reduce<readonly [string, number] | undefined>((best, cur) => (!best || cur[1] > best[1] ? cur : best), undefined);
+        ctx.globalAlpha = 1;
+        if (top && top[1] >= restSharp) {
+          const layer = mouthLayer(top[0]);
+          if (layer) {
+            const r = layer.rect;
+            const my = r.y + r.h / 2;
+            ctx.drawImage(layer.canvas, r.x, my - (r.h / 2) * stretch, r.w, r.h * stretch);
+          }
+        } else if (restLayer) ctx.drawImage(restLayer.canvas, restLayer.rect.x, restLayer.rect.y);
+      } else if (restLayer && restSharp * norm > 0.01) {
         ctx.globalAlpha = 1;
         ctx.drawImage(restLayer.canvas, restLayer.rect.x, restLayer.rect.y);
       }
-      for (const [shape, ws] of [...weights].sort((a, b) => a[1] - b[1])) {
+      // composition « over » en ordre croissant : chaque forme finit avec la couverture voulue
+      let covered = restSharp * norm;
+      for (const [shape, ws] of hardSwitch ? [] : [...weights].sort((a, b) => a[1] - b[1])) {
         const layer = mouthLayer(shape);
         const target = ws * norm;
         covered += target;
@@ -667,10 +695,12 @@ export class Puppet {
         const layer = key ? this.gaze.get(key) : undefined;
         if (layer) ctx.drawImage(layer.canvas, layer.rect.x, layer.rect.y);
       }
-      // sourcils sur les accents : levés (ou froncés pendant une émotion sérieuse)
+      // sourcils sur les accents, seulement sur le visage de base : une image d'émotion porte
+      // déjà ses sourcils, on ne superpose jamais deux paires. Froncés si un segment « sérieux »
+      // est actif sous le seuil d'affichage, levés sinon.
       const browThreshold = cfg.sourcilsAccent ?? 0.55;
-      if ((frame.brow ?? 0) >= browThreshold && browThreshold < 1) {
-        const key = frame.emotionDisplayed === "sérieux" && this.brows.has("down") ? "down" : "up";
+      if (!emotionLayer && (frame.brow ?? 0) >= browThreshold && browThreshold < 1) {
+        const key = (frame.emotions["sérieux"] ?? 0) > 0.1 && this.brows.has("down") ? "down" : "up";
         const layer = this.brows.get(key);
         if (layer) ctx.drawImage(layer.canvas, layer.rect.x, layer.rect.y);
       }
