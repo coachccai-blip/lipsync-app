@@ -68,7 +68,7 @@ export const SECTIONS: SectionSpec[] = [
       { path: "scene.marionnette.suivi", label: "Suivi retardé (cheveux, buste)", type: "range", min: 0, max: 1, step: 0.05 },
       { path: "scene.marionnette.ombre", label: "Ombre de contact", type: "range", min: 0, max: 0.6, step: 0.02 },
       { path: "scene.marionnette.regard", label: "Images de regard (saccades)", type: "checkbox" },
-      { path: "scene.marionnette.sourcilsAccent", label: "Sourcils sur accents (seuil, 1 = jamais)", type: "range", min: 0.2, max: 1, step: 0.05 },
+      { path: "scene.marionnette.sourcilsAccent", label: "Sourcils sur accents (images brows du manifeste ; 1 = jamais)", type: "range", min: 0.2, max: 1, step: 0.05 },
       { path: "scene.marionnette.mains", label: "Images de mains (piste gestes)", type: "checkbox" },
       { path: "scene.marionnette.epaules", label: "Balancement des épaules sur les gestes (°)", type: "range", min: 0, max: 3, step: 0.1 },
       { path: "scene.marionnette.mouthSharpness", label: "Transitions de bouche (4 = bascule nette, jamais deux bouches)", type: "range", min: 1, max: 4, step: 0.1 },

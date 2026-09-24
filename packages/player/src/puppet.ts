@@ -17,8 +17,11 @@ export interface PuppetManifest {
   emotions?: Record<string, string>;
   /** Regard : pupilles déplacées (left / right = côté de l'image, up). */
   gaze?: { left?: string; right?: string; up?: string; down?: string };
-  /** Sourcils seuls : levés (accents, questions) et froncés (insistance). */
+  /** Sourcils seuls : levés (accents, questions) et froncés (insistance). Optionnel : les images
+   * générées modifient souvent aussi les yeux ; sans images propres, mieux vaut s'en passer. */
   brows?: { up?: string; down?: string };
+  /** Numéro de version : ajouté aux URL des images pour contourner le cache du navigateur. */
+  version?: number | string;
   /** Bouches souriantes, mêmes clés Rhubarb, utilisées pendant les émotions listées dans smileEmotions. */
   mouthsSmile?: Record<string, string>;
   smileEmotions?: string[];
@@ -362,7 +365,11 @@ export class Puppet {
     const res = await fetch(manifestUrl, { cache: "no-store" });
     if (!res.ok) throw new Error(`manifeste introuvable : ${manifestUrl} (HTTP ${res.status})`);
     const manifest = (await res.json()) as PuppetManifest;
-    const resolve = (file: string) => new URL(file, new URL(manifestUrl, location.href)).toString();
+    const resolve = (file: string) => {
+      const u = new URL(file, new URL(manifestUrl, location.href));
+      if (manifest.version !== undefined) u.searchParams.set("v", String(manifest.version));
+      return u.toString();
+    };
     const p = new Puppet();
     const warnings: string[] = [];
     const entries: [string, string][] = [["base", manifest.base]];

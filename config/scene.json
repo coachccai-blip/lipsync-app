@@ -144,7 +144,7 @@
     "suivi": 0.6,
     "ombre": 0.22,
     "regard": true,
-    "sourcilsAccent": 0.55,
+    "sourcilsAccent": 1,
     "mains": true,
     "epaules": 0.8
   }

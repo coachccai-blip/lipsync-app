@@ -205,7 +205,7 @@ Variables d'environnement : `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `AZURE_TT
 Douze images optionnelles enrichissent la marionnette (prompts dans `docs/prompts-marionnette-2d-phase1.xlsx`), déclarées dans `marionnette.json` :
 
 - `gaze` (`left`, `right`, `up`) : les saccades du regard calculées par la vie procédurale deviennent visibles (pupilles déplacées), uniquement sur les yeux de base : une émotion garde ses propres yeux, un clignement passe au-dessus.
-- `brows` (`up`, `down`) : sourcils levés sur les accents forts (seuil `marionnette.sourcilsAccent`), froncés à la place pendant une émotion « sérieux ».
+- `brows` (`up`, `down`, optionnel, désactivé par défaut) : sourcils levés sur les accents forts (seuil `marionnette.sourcilsAccent`, 1 = jamais), froncés pendant une émotion « sérieux ». Les images générées par IA modifient presque toujours aussi les yeux et laissent des traces des sourcils d'origine ; sans images vraiment propres, ce calque fait plus de mal que de bien, il n'est donc plus déclaré dans le manifeste fourni.
 - `mouthsSmile` (mêmes clés Rhubarb, ici X, B, D) : bouches souriantes utilisées pendant les émotions listées dans `smileEmotions` (défaut `enjoué`), les autres formes restent normales.
 - `hands` (clé = nom de geste : `salut`, `explication`, `index`, `approbation`) : la piste gestes devient active en 2D, la main apparaît et disparaît avec le fondu des gestes (`gestures.fadeMs`). `mains_ouvertes` et `pouce` sont des alias.
 
@@ -213,7 +213,7 @@ Chaque calque n'est composé que dans sa zone (yeux seuls, bande des sourcils, b
 
 **Profondeur et finition** (aucune image) : parallaxe du fond de bulle à l'inverse de la tête (`bubble.parallaxe`, px par degré), respiration portée par le buste seul (`marionnette.breathing`, le buste se soulève, la tête suit à 40 %), balancement des épaules vers la main qui se lève (`marionnette.epaules`, degrés), et post-traitement `scene.post` : vignettage des bords, grain fin déterministe (graine = numéro d'image, donc rendu identique à chaque fois) et netteté du personnage 2D (convolution SVG). Le tout est appliqué dans la bulle, à l'identique en prévisualisation, rendu serveur et export navigateur.
 
-Les images de sourcils générées changent souvent aussi les yeux ou laissent des traces des sourcils d'origine : `python3 scripts/outils/nettoyer-sourcils.py` (numpy, Pillow) les reconstruit proprement, base sans ses sourcils plus les nouveaux sourcils seulement. À relancer si vous régénérez ces deux images.
+Pour réessayer les sourcils avec de nouvelles images : `python3 scripts/outils/nettoyer-sourcils.py` (numpy, Pillow) tente de les reconstruire (base sans ses sourcils plus les nouveaux sourcils), puis déclarez-les sous `brows` dans `marionnette.json` et baissez `marionnette.sourcilsAccent`. Le champ `version` du manifeste, incrémenté à chaque changement d'image, force le navigateur à recharger les images.
 
 `npm run verif-marionnette [projet] [dossier]` passe toutes les combinaisons (émotion × bouche × clignement × regard × sourcils × mains) dans Chrome headless, vérifie qu'aucun calque ne modifie l'image hors de sa zone, et écrit une vignette par combinaison pour contrôle visuel.
 

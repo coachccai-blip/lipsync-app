@@ -210,7 +210,7 @@ export const DEFAULT_SCENE: SceneConfig = {
     environment: { enabled: true, intensity: 0.5 },
   },
   post: { vignette: 0.18, grain: 0.035, nettete: 0.3 },
-  marionnette: { zoom: 1.0, offsetX: 0, offsetY: 0, motion: 1.6, breathing: 0.006, feather: 18, mouthEnergy: 0.08, emotionThreshold: 0.3, mouthSharpness: 4, seuilBruit: 20, lissage: 0.6, suivi: 0.6, ombre: 0.22, regard: true, sourcilsAccent: 0.55, mains: true, epaules: 0.8 },
+  marionnette: { zoom: 1.0, offsetX: 0, offsetY: 0, motion: 1.6, breathing: 0.006, feather: 18, mouthEnergy: 0.08, emotionThreshold: 0.3, mouthSharpness: 4, seuilBruit: 20, lissage: 0.6, suivi: 0.6, ombre: 0.22, regard: true, sourcilsAccent: 1, mains: true, epaules: 0.8 },
   life: {
     enabled: true,
     blink: { minInterval: 2, maxInterval: 6, duration: 0.16, doubleProbability: 0.15 },

@@ -30,10 +30,6 @@
     "right": "regard_droite.png",
     "up": "regard_haut.png"
   },
-  "brows": {
-    "up": "sourcils_leves.png",
-    "down": "sourcils_fronces.png"
-  },
   "mouthsSmile": {
     "X": "bouche_X_sourire.png",
     "B": "bouche_B_sourire.png",
@@ -47,5 +43,6 @@
     "explication": "mains_ouvertes.png",
     "index": "main_index.png",
     "approbation": "main_pouce.png"
-  }
+  },
+  "version": 4
 }
