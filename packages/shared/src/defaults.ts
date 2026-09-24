@@ -178,6 +178,8 @@ export const DEFAULT_SCENE: SceneConfig = {
   padding: { before: 0.5, after: 0.5 },
   background: { color: "#00FF00", greenWarnRatio: 0.05 },
   bubble: {
+    shape: "cercle",
+    cornerRadius: 96,
     diameter: "auto",
     margin: 40,
     position: { x: "center", y: "center" },

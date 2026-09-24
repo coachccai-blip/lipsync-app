@@ -146,6 +146,8 @@ Le schéma JSON est exporté par `PERFORMANCE_JSON_SCHEMA` (`packages/shared/src
 
 ## 3. Réglages visuels (`config/`)
 
+**Forme de la bulle** : `scene.bubble.shape` vaut `cercle` (défaut) ou `carre` (cadre carré à coins arrondis, rayon `scene.bubble.cornerRadius` en pixels, 0 = angles vifs). `diameter` est alors le côté du carré. Préréglage « Carré 1080, cadre carré arrondi » dans le studio ; même forme dans la page, le rendu serveur et l'export navigateur.
+
 **Fond derrière l'avatar** : `scene.bubble.couleur` (hexadécimal) définit la teinte ; le dégradé est calculé par `gradientFromColor` (halo à 50 % / 35 %, teinte à 60 %, bord plus sombre et plus saturé à 100 %), identique dans la page, le rendu serveur et l'export navigateur. `scene.bubble.fondLibre: true` utilise `scene.bubble.background` (CSS quelconque) à la place.
 
 Tout ce qui est esthétique est dans `config/` ; la prévisualisation se recharge à chaque sauvegarde.

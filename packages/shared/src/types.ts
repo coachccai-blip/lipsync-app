@@ -170,7 +170,11 @@ export interface SceneConfig {
     greenWarnRatio: number;
   };
   bubble: {
-    /** Diamètre en pixels (ou 'auto' = min(width, height) - 2*margin). */
+    /** Forme : cercle (défaut) ou carré à coins arrondis. */
+    shape?: "cercle" | "carre";
+    /** Rayon des coins du carré, en pixels (0 = angles vifs). */
+    cornerRadius?: number;
+    /** Diamètre (ou côté du carré) en pixels, ou 'auto' = min(width, height) - 2*margin. */
     diameter: number | "auto";
     margin: number;
     /** Position du centre de la bulle : 'center' ou pixels depuis le bord gauche / haut. */

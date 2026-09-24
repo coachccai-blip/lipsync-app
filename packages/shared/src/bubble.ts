@@ -87,3 +87,38 @@ export function bubbleBackground(b: BubbleBackgroundConfig): string {
   if (b.fondLibre || !b.couleur) return b.background;
   return gradientFromColor(b.couleur);
 }
+
+/** Rayon CSS des coins de la bulle : cercle (50 %) ou carré arrondi (px), borné au demi-côté. */
+export function bubbleCornerRadius(b: { shape?: "cercle" | "carre"; cornerRadius?: number }, side: number): number {
+  if (b.shape !== "carre") return side / 2;
+  return Math.max(0, Math.min(side / 2, b.cornerRadius ?? 0));
+}
+
+/**
+ * Trace le contour de la bulle (cercle ou carré arrondi) dans un contexte 2D, réduit de `inset`
+ * pixels (pour l'anneau, tracé au milieu de son épaisseur).
+ */
+export function traceBubblePath(
+  ctx: { beginPath(): void; arc(x: number, y: number, r: number, a0: number, a1: number): void; moveTo(x: number, y: number): void; arcTo(x1: number, y1: number, x2: number, y2: number, r: number): void; closePath(): void },
+  b: { shape?: "cercle" | "carre"; cornerRadius?: number },
+  cx: number,
+  cy: number,
+  side: number,
+  inset = 0,
+): void {
+  const s = side - 2 * inset;
+  ctx.beginPath();
+  if (b.shape !== "carre") {
+    ctx.arc(cx, cy, s / 2, 0, Math.PI * 2);
+    return;
+  }
+  const r = Math.max(0, Math.min(s / 2, bubbleCornerRadius(b, side) - inset));
+  const x = cx - s / 2;
+  const y = cy - s / 2;
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + s, y, x + s, y + s, r);
+  ctx.arcTo(x + s, y + s, x, y + s, r);
+  ctx.arcTo(x, y + s, x, y, r);
+  ctx.arcTo(x, y, x + s, y, r);
+  ctx.closePath();
+}

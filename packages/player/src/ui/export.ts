@@ -1,5 +1,5 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import { bubbleBackground, type AllConfig } from "@avatar/shared";
+import { bubbleBackground, traceBubblePath, type AllConfig } from "@avatar/shared";
 import { bubbleGeometry } from "../bubble.js";
 
 export interface ExportOptions {
@@ -93,16 +93,14 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
     ctx.fillStyle = o.cfg.scene.background.color;
     ctx.fillRect(0, 0, width, height);
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, d / 2, 0, Math.PI * 2);
+    traceBubblePath(ctx, o.cfg.scene.bubble, cx, cy, d);
     ctx.clip();
     ctx.fillStyle = bubbleFill;
     ctx.fillRect(cx - d / 2, cy - d / 2, d, d);
     if (src) ctx.drawImage(src, cx - d / 2, cy - d / 2, d, d);
     ctx.restore();
     if (ring.enabled && ring.width > 0) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, d / 2 - ring.width / 2, 0, Math.PI * 2);
+      traceBubblePath(ctx, o.cfg.scene.bubble, cx, cy, d, ring.width / 2);
       ctx.lineWidth = ring.width;
       ctx.strokeStyle = ring.color;
       ctx.stroke();

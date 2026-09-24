@@ -1,4 +1,4 @@
-import { bubbleBackground, type SceneConfig } from "@avatar/shared";
+import { bubbleBackground, bubbleCornerRadius, type SceneConfig } from "@avatar/shared";
 
 /** Met en page la bulle CSS (taille, position, fond, anneau) et renvoie son diamètre. */
 export function layoutBubble(cfg: SceneConfig, background: "green" | "transparent"): number {
@@ -15,13 +15,16 @@ export function layoutBubble(cfg: SceneConfig, background: "green" | "transparen
   const pos = cfg.bubble.position ?? { x: "center", y: "center" };
   const cx = pos.x === "center" ? width / 2 : pos.x;
   const cy = pos.y === "center" ? height / 2 : pos.y;
+  const radius = `${bubbleCornerRadius(cfg.bubble, d)}px`;
   Object.assign(bubble.style, {
     width: `${d}px`,
     height: `${d}px`,
     left: `${Math.round(cx - d / 2)}px`,
     top: `${Math.round(cy - d / 2)}px`,
     background: bubbleBackground(cfg.bubble),
+    borderRadius: radius,
   });
+  ring.style.borderRadius = radius;
   ring.style.boxShadow = cfg.bubble.ring.enabled ? `inset 0 0 0 ${cfg.bubble.ring.width}px ${cfg.bubble.ring.color}` : "none";
   return d;
 }

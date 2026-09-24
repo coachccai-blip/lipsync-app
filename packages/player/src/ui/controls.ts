@@ -32,7 +32,9 @@ export const SECTIONS: SectionSpec[] = [
       { path: "scene.resolution.width", label: "Largeur (px)", type: "number", min: 256, max: 4096, step: 2 },
       { path: "scene.resolution.height", label: "Hauteur (px)", type: "number", min: 256, max: 4096, step: 2 },
       { path: "scene.fps", label: "Cadence (i/s)", type: "select", options: ["24", "25", "30", "50", "60"] },
-      { path: "scene.bubble.diameter", label: "Diamètre bulle (px ou auto)", type: "text" },
+      { path: "scene.bubble.shape", label: "Forme de la bulle", type: "select", options: ["cercle", "carre"] },
+      { path: "scene.bubble.cornerRadius", label: "Rayon des coins du carré (px)", type: "range", min: 0, max: 400, step: 4 },
+      { path: "scene.bubble.diameter", label: "Diamètre ou côté (px ou auto)", type: "text" },
       { path: "scene.bubble.margin", label: "Marge (px)", type: "number", min: 0, max: 500, step: 1 },
       { path: "scene.bubble.position.x", label: "Centre X (px ou center)", type: "text" },
       { path: "scene.bubble.position.y", label: "Centre Y (px ou center)", type: "text" },
@@ -249,9 +251,21 @@ function toHex(color: string): string {
 /** Préréglages de format : résolution + position de la bulle. */
 export const FORMAT_PRESETS: { label: string; apply: (cfg: AllConfig) => void }[] = [
   {
-    label: "Carré 1080",
+    label: "Carré 1080, bulle ronde",
     apply: (c) => {
       c.scene.resolution = { width: 1080, height: 1080 };
+      c.scene.bubble.shape = "cercle";
+      c.scene.bubble.diameter = "auto";
+      c.scene.bubble.margin = 40;
+      c.scene.bubble.position = { x: "center", y: "center" };
+    },
+  },
+  {
+    label: "Carré 1080, cadre carré arrondi",
+    apply: (c) => {
+      c.scene.resolution = { width: 1080, height: 1080 };
+      c.scene.bubble.shape = "carre";
+      c.scene.bubble.cornerRadius = 96;
       c.scene.bubble.diameter = "auto";
       c.scene.bubble.margin = 40;
       c.scene.bubble.position = { x: "center", y: "center" };

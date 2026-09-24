@@ -72,7 +72,7 @@ body.transparent #page, body.transparent:not(.ui) { background: transparent; }
 
 /* Zone capturée par Puppeteer : exactement la résolution de sortie. */
 #page { position: relative; width: var(--page-w); height: var(--page-h); background: var(--page-bg); overflow: hidden; }
-#bubble { position: absolute; border-radius: 50%; overflow: hidden; }
+#bubble { position: absolute; border-radius: 50%; overflow: hidden; } /* rayon réel posé par layoutBubble (cercle ou carré) */
 #bubble canvas { display: block; }
 #ring { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
 #viewport { transform-origin: top left; }
