@@ -1,0 +1,48 @@
+{
+  "_doc": "Marionnette 2D « capboy » (casquette bleue) : images alignées sur capboy_base.png. Zones bouche / yeux détectées automatiquement par différence avec la base. keyColor auto = fond détouré sur la couleur des bords de chaque image.",
+  "version": 1,
+  "base": "capboy_base.png",
+  "mouths": {
+    "X": "capboy_bouche_X.png",
+    "A": "capboy_bouche_A.png",
+    "B": "capboy_bouche_B.png",
+    "C": "capboy_bouche_C.png",
+    "D": "capboy_bouche_D.png",
+    "E": "capboy_bouche_E.png",
+    "F": "capboy_bouche_F.png",
+    "G": "capboy_bouche_G.png",
+    "H": "capboy_bouche_H.png"
+  },
+  "eyes": {
+    "half": "capboy_yeux_mi_clos.png",
+    "closed": "capboy_yeux_fermes.png"
+  },
+  "emotions": {
+    "enjoué": "capboy_emotion_enjoue.png",
+    "surpris": "capboy_emotion_surpris.png",
+    "sérieux": "capboy_emotion_serieux.png",
+    "pensif": "capboy_emotion_pensif.png"
+  },
+  "gaze": {
+    "left": "capboy_regard_gauche.png",
+    "right": "capboy_regard_droite.png",
+    "up": "capboy_regard_haut.png"
+  },
+  "mouthsSmile": {
+    "X": "capboy_bouche_X_sourire.png",
+    "B": "capboy_bouche_B_sourire.png",
+    "D": "capboy_bouche_D_sourire.png"
+  },
+  "smileEmotions": [
+    "enjoué"
+  ],
+  "hands": {
+    "salut": "capboy_main_levee.png",
+    "explication": "capboy_mains_ouvertes.png",
+    "index": "capboy_main_index.png",
+    "approbation": "capboy_main_pouce.png"
+  },
+  "keyColor": "auto",
+  "keyTolerance": 0.12,
+  "regions": null
+}

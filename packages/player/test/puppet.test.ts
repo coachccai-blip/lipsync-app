@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeMask, diffRect, groupMask, keyOut, unionRect } from "../src/puppet.js";
+import { changeMask, consensusRect, diffRect, groupMask, keyOut, unionRect } from "../src/puppet.js";
 
 function image(w: number, h: number, fill: [number, number, number]): Uint8ClampedArray {
   const d = new Uint8ClampedArray(w * h * 4);
@@ -107,5 +107,25 @@ describe("marionnette 2D : masque commun d'un groupe", () => {
     expect(m[60 * W + 165]).toBeCloseTo(1, 5);
     expect(m[60 * W + 100]).toBe(0);
     expect(m[10 * W + 10]).toBe(0);
+  });
+});
+
+describe("marionnette 2D : zone par consensus", () => {
+  it("ignore une image qui a aussi modifié une autre zone", () => {
+    const W = 256;
+    const H = 256;
+    const base = image(W, H, [200, 150, 120]);
+    const mouths = [];
+    for (let i = 0; i < 4; i++) {
+      const m = new Uint8ClampedArray(base);
+      paint(m, W, 96, 160, 160, 200, [60, 20, 20]);
+      if (i === 0) paint(m, W, 64, 40, 192, 70, [20, 20, 20]); // sourcils retouchés par erreur
+      mouths.push(m);
+    }
+    const r = consensusRect(base, mouths, W, H, 2)!;
+    expect(r.y).toBeGreaterThanOrEqual(144);
+    expect(r.y + r.h).toBeLessThanOrEqual(208);
+    const r1 = consensusRect(base, mouths, W, H, 1)!;
+    expect(r1.y).toBeLessThan(64);
   });
 });

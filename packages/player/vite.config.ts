@@ -1,5 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
-import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,14 +38,21 @@ function repoFiles(): Plugin {
       copyDir(path.join(repoRoot, "config"), path.join(out, "config"), (f) => f.endsWith(".json"));
       copyDir(path.join(repoRoot, "assets", "models"), path.join(out, "assets", "models"), (f) => /\.(glb|gltf|bin|png|jpg|jpeg|webp)$/i.test(f));
       copyDir(path.join(repoRoot, "assets", "clips"), path.join(out, "assets", "clips"), (f) => /\.(glb|gltf|bin)$/i.test(f));
-      // toutes les marionnettes : chaque dossier assets/<nom>/ contenant un marionnette.json
+      // toutes les marionnettes : chaque dossier assets/<nom>/ contenant un marionnette.json,
+      // et un index des personnages pour le sélecteur de la démo
       const assetsDir = path.join(repoRoot, "assets");
+      const models: string[] = [];
       if (existsSync(assetsDir)) {
+        const modelsDir = path.join(assetsDir, "models");
+        if (existsSync(modelsDir)) for (const f of readdirSync(modelsDir)) if (/\.(glb|gltf)$/i.test(f)) models.push(`assets/models/${f}`);
         for (const d of readdirSync(assetsDir)) {
           if (!existsSync(path.join(assetsDir, d, "marionnette.json"))) continue;
           copyDir(path.join(assetsDir, d), path.join(out, "assets", d), (f) => /\.(png|jpg|jpeg|webp|json)$/i.test(f));
+          models.push(`assets/${d}/marionnette.json`);
         }
       }
+      mkdirSync(path.join(out, "assets"), { recursive: true });
+      writeFileSync(path.join(out, "assets", "index.json"), JSON.stringify({ models }, null, 2));
     },
   };
 }

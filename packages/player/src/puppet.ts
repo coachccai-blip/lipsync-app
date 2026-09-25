@@ -95,6 +95,12 @@ export function keyOut(img: ImageData, key: [number, number, number], tolerance:
  */
 export function diffRect(base: Uint8ClampedArray, other: Uint8ClampedArray, w: number, h: number, exclude?: Rect, block = 16, density = 0.3): Rect | null {
   const bw = Math.ceil(w / block);
+  return blocksRect(diffBlocks(base, other, w, h, exclude, block, density), bw, Math.ceil(h / block), w, h, block);
+}
+
+/** Blocs (1 = densément modifié) de la différence entre une image et la base. */
+export function diffBlocks(base: Uint8ClampedArray, other: Uint8ClampedArray, w: number, h: number, exclude?: Rect, block = 16, density = 0.3): Uint8Array {
+  const bw = Math.ceil(w / block);
   const bh = Math.ceil(h / block);
   const counts = new Uint32Array(bw * bh);
   for (let y = 0; y < h; y++) {
@@ -107,13 +113,19 @@ export function diffRect(base: Uint8ClampedArray, other: Uint8ClampedArray, w: n
     }
   }
   const minCount = block * block * density;
+  const out = new Uint8Array(bw * bh);
+  for (let i = 0; i < out.length; i++) out[i] = counts[i] >= minCount ? 1 : 0;
+  return out;
+}
+
+function blocksRect(blocks: Uint8Array, bw: number, bh: number, w: number, h: number, block: number): Rect | null {
   let x0 = bw;
   let y0 = bh;
   let x1 = -1;
   let y1 = -1;
   for (let by = 0; by < bh; by++) {
     for (let bx = 0; bx < bw; bx++) {
-      if (counts[by * bw + bx] < minCount) continue;
+      if (!blocks[by * bw + bx]) continue;
       if (bx < x0) x0 = bx;
       if (bx > x1) x1 = bx;
       if (by < y0) y0 = by;
@@ -124,6 +136,54 @@ export function diffRect(base: Uint8ClampedArray, other: Uint8ClampedArray, w: n
   const x = x0 * block;
   const y = y0 * block;
   return { x, y, w: Math.min(w, (x1 + 1) * block) - x, h: Math.min(h, (y1 + 1) * block) - y };
+}
+
+/**
+ * Boîte englobante des blocs modifiés par une MAJORITÉ des images (au moins `minVotes`) : une
+ * image qui a aussi changé les sourcils ou les yeux par erreur n'élargit pas la zone du groupe.
+ */
+export function consensusRect(base: Uint8ClampedArray, images: Uint8ClampedArray[], w: number, h: number, minVotes: number, exclude?: Rect, block = 16, density = 0.3): Rect | null {
+  const bw = Math.ceil(w / block);
+  const bh = Math.ceil(h / block);
+  const per = images.map((img) => diffBlocks(base, img, w, h, exclude, block, density));
+  const votes = new Uint32Array(bw * bh);
+  for (const b of per) for (let i = 0; i < b.length; i++) votes[i] += b[i];
+  const seed = new Uint8Array(bw * bh);
+  let any = false;
+  for (let i = 0; i < seed.length; i++) {
+    seed[i] = votes[i] >= minVotes ? 1 : 0;
+    any ||= seed[i] === 1;
+  }
+  if (!any) return null;
+  // la zone d'une image = ses blocs connectés (8 voisins) à la zone commune : une grande bouche
+  // ouverte est prise en entier, des sourcils retouchés à côté ne le sont pas
+  const reach = new Uint8Array(bw * bh);
+  for (const b of per) {
+    const seen = new Uint8Array(bw * bh);
+    const stack: number[] = [];
+    for (let i = 0; i < seed.length; i++) if (seed[i] && b[i]) {
+      seen[i] = 1;
+      stack.push(i);
+    }
+    while (stack.length) {
+      const i = stack.pop()!;
+      reach[i] = 1;
+      const bx = i % bw;
+      const by = (i - bx) / bw;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = bx + dx;
+        const ny = by + dy;
+        if (nx < 0 || ny < 0 || nx >= bw || ny >= bh) continue;
+        const j = ny * bw + nx;
+        if (!seen[j] && b[j]) {
+          seen[j] = 1;
+          stack.push(j);
+        }
+      }
+    }
+  }
+  for (let i = 0; i < seed.length; i++) if (seed[i]) reach[i] = 1;
+  return blocksRect(reach, bw, bh, w, h, block);
 }
 
 export function unionRect(a: Rect | null, b: Rect | null): Rect | null {
@@ -409,14 +469,20 @@ export class Puppet {
     let mouthRect: Rect | null = manifest.regions?.mouth ?? null;
     let eyesRect: Rect | null = manifest.regions?.eyes ?? null;
     if (!mouthRect) {
-      for (const [k, d] of p.images) if (k.startsWith("mouth:") || k.startsWith("smile:")) mouthRect = unionRect(mouthRect, diffRect(bd, d.data, p.width, p.height));
+      // zone de la bouche : blocs modifiés par au moins un tiers des images de bouche (une image
+      // qui aurait aussi retouché les sourcils ou les yeux ne compte pas)
+      const mouthImgs = [...p.images].filter(([k]) => k.startsWith("mouth:") || k.startsWith("smile:")).map(([, d]) => d.data);
+      mouthRect = consensusRect(bd, mouthImgs, p.width, p.height, Math.max(2, Math.ceil(mouthImgs.length / 3)));
+      if (!mouthRect) for (const d of mouthImgs) mouthRect = unionRect(mouthRect, diffRect(bd, d, p.width, p.height));
       if (!mouthRect) {
         mouthRect = { x: Math.round(p.width * 0.35), y: Math.round(p.height * 0.55), w: Math.round(p.width * 0.3), h: Math.round(p.height * 0.18) };
         warnings.push("zone de la bouche non détectée (images identiques à la base ?) : zone par défaut");
       }
     }
     if (!eyesRect) {
-      for (const [k, d] of p.images) if (k.startsWith("eyes:") || k.startsWith("emotion:")) eyesRect = unionRect(eyesRect, diffRect(bd, d.data, p.width, p.height, mouthRect));
+      const eyeImgs = [...p.images].filter(([k]) => k.startsWith("eyes:") || k.startsWith("emotion:")).map(([, d]) => d.data);
+      eyesRect = consensusRect(bd, eyeImgs, p.width, p.height, Math.min(2, eyeImgs.length), mouthRect);
+      if (!eyesRect) for (const d of eyeImgs) eyesRect = unionRect(eyesRect, diffRect(bd, d, p.width, p.height, mouthRect));
       if (!eyesRect) {
         eyesRect = { x: Math.round(p.width * 0.25), y: Math.round(p.height * 0.3), w: Math.round(p.width * 0.5), h: Math.round(p.height * 0.2) };
         warnings.push("zone des yeux non détectée : zone par défaut");
@@ -426,7 +492,13 @@ export class Puppet {
     if (eyesRect.y + eyesRect.h > mouthRect.y) eyesRect.h = Math.max(10, mouthRect.y - eyesRect.y - 2);
     // yeux seuls (paupières et pupilles, sans sourcils) : d'après les images de clignement
     let eyesOnly: Rect | null = null;
-    for (const [k, d] of p.images) if (k.startsWith("eyes:")) eyesOnly = unionRect(eyesOnly, diffRect(bd, d.data, p.width, p.height, mouthRect));
+    {
+      // yeux seuls : consensus des clignements et des regards (une image qui a aussi bougé les
+      // sourcils ne les entraîne pas)
+      const blinks = [...p.images].filter(([k]) => k.startsWith("eyes:")).map(([, d]) => d.data);
+      eyesOnly = blinks.length ? consensusRect(bd, blinks, p.width, p.height, blinks.length, mouthRect) : null;
+      if (!eyesOnly) for (const d of blinks) eyesOnly = unionRect(eyesOnly, diffRect(bd, d, p.width, p.height, mouthRect));
+    }
     if (eyesOnly) eyesOnly = clipRect(eyesOnly, eyesRect);
     // sourcils : au-dessus des yeux seuls, d'après les images de sourcils et d'émotions
     let browsRect: Rect | null = null;
@@ -567,10 +639,18 @@ export class Puppet {
         const clean = new ImageData(new Uint8ClampedArray(d.data), d.width, d.height);
         const cd = clean.data;
         const bd = baseData.data;
+        const key = cornerColor(d.data, d.width, d.height);
         for (let i = 3; i < cd.length; i += 4) {
-          if (bd[i] >= 128) continue;
-          const a = cd[i] / 255;
-          cd[i] = Math.round(255 * smoothstep(Math.min(1, Math.max(0, (a - 0.35) / 0.4))));
+          if (bd[i] < 128) {
+            const a = cd[i] / 255;
+            cd[i] = Math.round(255 * smoothstep(Math.min(1, Math.max(0, (a - 0.35) / 0.4))));
+            continue;
+          }
+          // sur le personnage de la base, un pixel proche de la couleur de fond est un bord
+          // de silhouette légèrement décalé (fond bleu) : jamais composé
+          const dist = Math.max(Math.abs(cd[i - 3] - key[0]), Math.abs(cd[i - 2] - key[1]), Math.abs(cd[i - 1] - key[2]));
+          if (dist < 70) cd[i] = 0;
+          else if (dist < 110) cd[i] = Math.round(cd[i] * ((dist - 70) / 40));
         }
         this.hands.set(k.slice(5), makeLayer(clean, full, 0, mask, smoothing));
       }

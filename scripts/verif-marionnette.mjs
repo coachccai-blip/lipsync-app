@@ -5,7 +5,7 @@
  * automatiquement que rien ne change hors de la zone de chaque calque, et écrit une vignette
  * par combinaison plus des planches de contrôle.
  *
- *   node scripts/verif-marionnette.mjs [projet=marionnette] [dossier de sortie=verif-marionnette]
+ *   node scripts/verif-marionnette.mjs [projet=marionnette] [dossier de sortie=verif-marionnette] [modèle=assets/<nom>/marionnette.json]
  *
  * Nécessite Chrome (CHROME_PATH ou détection automatique) et un projet préparé avec ce modèle.
  */
@@ -17,6 +17,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import fs from "node:fs";
 const project = process.argv[2] ?? "marionnette";
 const outDir = path.resolve(process.argv[3] ?? "verif-marionnette");
+const modelArg = process.argv[4];
 fs.mkdirSync(outDir, { recursive: true });
 const port = 4183;
 const server = spawn(process.execPath, ["packages/cli/dist/index.js", "studio", "--port", String(port), "--no-open"], { cwd: process.cwd(), stdio: "pipe" });
@@ -32,6 +33,15 @@ try {
   await page.goto(`http://127.0.0.1:${port}/index.html?mode=studio&project=${encodeURIComponent(project)}`, { waitUntil: "load", timeout: 60000 });
   await page.evaluate(() => window.avatarReady);
   await sleep(1500);
+  if (modelArg) {
+    await page.evaluate(async (model) => {
+      const s = window.__studio;
+      s.cfg.scene.model = model;
+      s.payload.modelUrl = `/personnages/${model.replace(/^assets\//, "")}`;
+      s.onConfigEdited("scene");
+      await new Promise((r) => setTimeout(r, 3500));
+    }, modelArg);
+  }
   const result = await page.evaluate(async () => {
     const s = window.__studio; const p = s.player; const puppet = p.puppet;
     const orig = p.animator.frameAt;

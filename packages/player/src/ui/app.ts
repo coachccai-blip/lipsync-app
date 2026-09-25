@@ -107,6 +107,14 @@ export class StudioApp {
 
     if (this.mode === "demo") {
       if (demoPayload) await this.setPayload(demoPayload, "Démo");
+      // index des personnages embarqués (écrit par la construction de la page)
+      void fetch(`${import.meta.env.BASE_URL}assets/index.json`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { models: [] }))
+        .then((j: { models?: string[] }) => {
+          this.models = j.models ?? [];
+          if (this.models.length) this.renderPanel("reglages");
+        })
+        .catch(() => undefined);
       this.renderAll();
       return;
     }
@@ -645,6 +653,13 @@ export class StudioApp {
     this.toast(`${auto.expressions.length} segment(s) d'émotion et ${auto.gestures.length} geste(s) générés`, "ok");
   }
 
+  /** URL d'un modèle selon le mode : serveur du studio (/personnages/) ou fichiers statiques de la page. */
+  private modelUrlFor(model: string): string {
+    const rel = model.replace(/^assets\//, "");
+    if (this.mode === "studio") return `/personnages/${rel.split("/").map(encodeURIComponent).join("/")}`;
+    return `${import.meta.env.BASE_URL}assets/${rel}`;
+  }
+
   private onConfigEdited(file: keyof AllConfig): void {
     this.dirtyConfig.add(file);
     this.scheduleApply();
@@ -1175,20 +1190,23 @@ export class StudioApp {
       return;
     }
     el.append(h("p.hint", null, "Chaque réglage s'applique immédiatement à l'image. Enregistrez pour l'écrire dans config/ (utilisé par le rendu)."));
-    if (this.mode === "studio") {
-      el.append(h("h3", null, "Modèle 3D"));
+    if (this.models.length) {
+      el.append(h("h3", null, "Personnage"));
+      const label = (m: string) => {
+        const puppet = /^assets\/([^/]+)\/marionnette\.json$/.exec(m);
+        return puppet ? `${puppet[1]} (marionnette 2D)` : `${m.replace(/^assets\/models\//, "")} (3D)`;
+      };
       const modelSel = h("select", null,
-        ...this.models.map((m) => h("option", { value: m, selected: m === cfg.scene.model }, m.replace(/^assets\/models\//, ""))),
+        ...this.models.map((m) => h("option", { value: m, selected: m === cfg.scene.model }, label(m))),
         this.models.includes(cfg.scene.model) ? null : h("option", { value: cfg.scene.model, selected: true }, `${cfg.scene.model} (introuvable)`),
       );
       modelSel.onchange = () => {
         cfg.scene.model = modelSel.value;
+        if (this.payload) this.payload.modelUrl = this.modelUrlFor(modelSel.value);
         this.onConfigEdited("scene");
-        void this.saveConfig("scene").then(() => {
-          if (this.current) void this.openProject(this.current);
-        });
+        if (this.mode === "studio") void this.saveConfig("scene");
       };
-      el.append(h("div.row", null, modelSel), h("p.hint", null, "Fichiers .glb de assets/models/. Le changement est enregistré et le projet rechargé."));
+      el.append(h("div.row", null, modelSel), h("p.hint", null, this.mode === "studio" ? "Marionnettes 2D (assets/<nom>/marionnette.json) et modèles 3D (assets/models/*.glb). Le changement s'applique immédiatement et est enregistré dans config/scene.json." : "Personnages embarqués dans cette page. Le changement s'applique immédiatement."));
     }
     if (this.perf && this.cfg && this.player.report?.kind !== "marionnette") {
       el.append(h("h3", null, "Tester un geste ici"));

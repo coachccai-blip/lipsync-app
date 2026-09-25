@@ -96,13 +96,18 @@ export interface Job {
   events: JobEvent[];
 }
 
+/** URL d'un modèle (GLB ou manifeste de marionnette) sous assets/, servie par /personnages/. */
+export function personnageUrl(root: string, modelPath: string): string {
+  const rel = path.relative(path.join(root, "assets"), modelPath).split(path.sep).map(encodeURIComponent).join("/");
+  return `/personnages/${rel}`;
+}
+
 /** Construit la charge utile envoyée à window.loadProject(). */
 export function buildPayload(projectDir: string, root: string, background: "green" | "transparent" = "green") {
   const config = loadConfig(root);
   const performance = loadPerformance(projectDir, configVocab(config));
   const modelPath = path.resolve(root, config.scene.model);
-  const modelUrl = existsSync(modelPath) ? `/model/${encodeURIComponent(path.basename(modelPath))}` : undefined;
-  void modelUrl;
+  const modelUrl = existsSync(modelPath) ? personnageUrl(root, modelPath) : undefined;
   const clipsDir = path.join(root, "assets", "clips");
   const clipUrls: Record<string, string> = {};
   if (existsSync(clipsDir)) {
@@ -435,6 +440,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       return send(res, safeJoin(projectDir(name), rest.join("/")));
     }
     if (p.startsWith("/project/")) return send(res, safeJoin(projectDir(project), p.slice("/project/".length)));
+    if (p.startsWith("/personnages/")) return send(res, safeJoin(path.join(root, "assets"), decodeURIComponent(p.slice("/personnages/".length))));
     if (p.startsWith("/model/")) {
       // GLB : le fichier lui-même ; marionnette (manifeste .json) : les fichiers de son dossier
       const modelPath = path.resolve(root, loadConfig(root).scene.model);

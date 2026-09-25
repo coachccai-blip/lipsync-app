@@ -45,6 +45,10 @@ npm run avatar -- check   # bilan : outils, variables, modèle, player
 
 ### Marionnette 2D (personnage illustré)
 
+Deux personnages sont fournis : `assets/marionnette/` (homme en costume) et `assets/capboy/` (garçon à casquette bleue, 26 images : bouches, clignements, émotions, regards, sourires, mains). Le choix se fait dans **Réglages → Personnage** (studio et page GitHub Pages) et s'applique immédiatement ; le studio l'enregistre dans `config/scene.json` (`scene.model`). Pour ajouter un personnage : un dossier `assets/<nom>/` avec ses images et un `marionnette.json` (prompts types dans `docs/prompts-marionnette-casquette.xlsx`), il apparaît automatiquement dans la liste et dans la page publiée.
+
+Les zones bouche et yeux sont détectées par **consensus** entre les images d'un même groupe (blocs modifiés par une majorité d'entre elles, étendus aux blocs connectés de chaque image) : une bouche générée qui aurait aussi retouché les sourcils n'élargit pas la zone. Une image de main dont la tête est plus petite ou décalée peut être recalée sur la base (échelle + translation) avant d'être déposée ; c'est ce qui a été fait pour trois images de `capboy`.
+
 Le mode marionnette anime une illustration à partir d'images alignées : une base bouche fermée, une image par forme de bouche Rhubarb (X, A, B, C, D, E, F, G, H), les yeux mi-clos et fermés pour les clignements, et une image par émotion (sourcils et yeux). Les zones de la bouche et des yeux sont découpées automatiquement par différence avec la base, les bords sont adoucis, le fond uni est rendu transparent, et les mêmes couches d'animation qu'en 3D s'appliquent : fondus entre bouches, étirement selon l'énergie, clignements, émotions, micro-mouvements de tête, respiration, hochements.
 
 - Dossier : `assets/marionnette/` avec `marionnette.json` (manifeste : fichiers, couleur de fond à détourer, zones facultatives). C'est le modèle par défaut de `config/scene.json`.
