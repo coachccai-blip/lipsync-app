@@ -38,7 +38,14 @@ function repoFiles(): Plugin {
       copyDir(path.join(repoRoot, "config"), path.join(out, "config"), (f) => f.endsWith(".json"));
       copyDir(path.join(repoRoot, "assets", "models"), path.join(out, "assets", "models"), (f) => /\.(glb|gltf|bin|png|jpg|jpeg|webp)$/i.test(f));
       copyDir(path.join(repoRoot, "assets", "clips"), path.join(out, "assets", "clips"), (f) => /\.(glb|gltf|bin)$/i.test(f));
-      copyDir(path.join(repoRoot, "assets", "marionnette"), path.join(out, "assets", "marionnette"), (f) => /\.(png|jpg|jpeg|webp|json)$/i.test(f));
+      // toutes les marionnettes : chaque dossier assets/<nom>/ contenant un marionnette.json
+      const assetsDir = path.join(repoRoot, "assets");
+      if (existsSync(assetsDir)) {
+        for (const d of readdirSync(assetsDir)) {
+          if (!existsSync(path.join(assetsDir, d, "marionnette.json"))) continue;
+          copyDir(path.join(assetsDir, d), path.join(out, "assets", d), (f) => /\.(png|jpg|jpeg|webp|json)$/i.test(f));
+        }
+      }
     },
   };
 }
