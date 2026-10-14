@@ -1,0 +1,48 @@
+{
+  "_doc": "Marionnette 2D « lydia » : images alignées sur lydia_base.png. Zones bouche / yeux détectées automatiquement par différence avec la base. keyColor auto = fond détouré sur la couleur des bords de chaque image.",
+  "version": 1,
+  "base": "lydia_base.png",
+  "mouths": {
+    "X": "lydia_bouche_X.png",
+    "A": "lydia_bouche_A.png",
+    "B": "lydia_bouche_B.png",
+    "C": "lydia_bouche_C.png",
+    "D": "lydia_bouche_D.png",
+    "E": "lydia_bouche_E.png",
+    "F": "lydia_bouche_F.png",
+    "G": "lydia_bouche_G.png",
+    "H": "lydia_bouche_H.png"
+  },
+  "eyes": {
+    "half": "lydia_yeux_mi_clos.png",
+    "closed": "lydia_yeux_fermes.png"
+  },
+  "emotions": {
+    "enjoué": "lydia_emotion_enjoue.png",
+    "surpris": "lydia_emotion_surpris.png",
+    "sérieux": "lydia_emotion_serieux.png",
+    "pensif": "lydia_emotion_pensif.png"
+  },
+  "gaze": {
+    "left": "lydia_regard_gauche.png",
+    "right": "lydia_regard_droite.png",
+    "up": "lydia_regard_haut.png"
+  },
+  "mouthsSmile": {
+    "X": "lydia_bouche_X_sourire.png",
+    "B": "lydia_bouche_B_sourire.png",
+    "D": "lydia_bouche_D_sourire.png"
+  },
+  "smileEmotions": [
+    "enjoué"
+  ],
+  "hands": {
+    "salut": "lydia_main_levee.png",
+    "explication": "lydia_mains_ouvertes.png",
+    "index": "lydia_main_index.png",
+    "approbation": "lydia_main_pouce.png"
+  },
+  "keyColor": "auto",
+  "keyTolerance": 0.12,
+  "regions": null
+}

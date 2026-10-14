@@ -79,13 +79,108 @@ export function keyOut(img: ImageData, key: [number, number, number], tolerance:
   const t1 = tolerance * 1.5 * 255;
   const l0 = (loose?.tolerance ?? tolerance) * 0.5 * 255;
   const l1 = (loose?.tolerance ?? tolerance) * 1.5 * 255;
-  for (let i = 0; i < d.length; i += 4) {
+  // canal dominant du fond (bleu, vert…) : utilisé pour supprimer la dominante sur les bords
+  const dominant = key[0] >= key[1] && key[0] >= key[2] ? 0 : key[1] >= key[2] ? 1 : 2;
+  const others = [0, 1, 2].filter((c) => c !== dominant);
+  const keyExcess = key[dominant] - Math.max(key[others[0]], key[others[1]]);
+  const w = img.width;
+  const h = img.height;
+  const transparent = new Uint8Array(w * h);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
     const dist = Math.max(Math.abs(d[i] - key[0]), Math.abs(d[i + 1] - key[1]), Math.abs(d[i + 2] - key[2]));
     // là où la base est déjà du fond, on détoure plus largement (fond légèrement différent d'une image à l'autre)
     const isBg = loose ? loose.alpha[i + 3] < 128 : false;
     const a = isBg ? smoothstep((dist - l0) / (l1 - l0)) : smoothstep((dist - t0) / (t1 - t0));
     d[i + 3] = Math.round(d[i + 3] * a);
+    transparent[p] = d[i + 3] < 128 ? 1 : 0;
   }
+  if (keyExcess < 40) return;
+  // suppression de la dominante (despill) près du bord détouré : un pixel conservé, à quelques
+  // pixels du fond, dont le canal du fond dépasse les deux autres a été mélangé au fond (mèches
+  // de cheveux, bords flous) ; on ramène ce canal au niveau des autres. Les zones intérieures
+  // (vêtement ou casquette bleus) ne sont pas touchées.
+  // Les pixels contaminés sont repeints avec la couleur des pixels sains voisins (extension de
+  // la couleur intérieure vers le bord), l'alpha restant inchangé : la mèche garde sa finesse
+  // mais prend la couleur des cheveux au lieu d'un mélange fond + cheveux.
+  // rayon large : des mèches ondulées laissent passer le fond loin du bord franc
+  const R = 16;
+  const nearEdge = dilateMask(transparent, w, h, R);
+  // pixels contaminés : près du bord, encore visibles (alpha > 0, y compris semi-transparents),
+  // canal du fond en excès
+  const flagged = new Uint8Array(w * h);
+  const clean = new Uint8Array(w * h); // voisins utilisables : opaques et non contaminés
+  let count = 0;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    if (d[i + 3] === 0) continue;
+    const excess = d[i + dominant] - Math.max(d[i + others[0]], d[i + others[1]]);
+    const dist = Math.max(Math.abs(d[i] - key[0]), Math.abs(d[i + 1] - key[1]), Math.abs(d[i + 2] - key[2]));
+    const contaminated = nearEdge[p] && excess >= 12 && dist <= 220;
+    if (contaminated) {
+      flagged[p] = 1;
+      count++;
+    } else if (d[i + 3] >= 128) clean[p] = 1;
+  }
+  if (!count) return;
+  for (let pass = 0; pass < R + 4 && count > 0; pass++) {
+    const next = new Uint8Array(flagged);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const p = y * w + x;
+        if (!flagged[p]) continue;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            const q = ny * w + nx;
+            if (!clean[q]) continue;
+            const j = q * 4;
+            r += d[j];
+            g += d[j + 1];
+            b += d[j + 2];
+            n++;
+          }
+        }
+        if (!n) continue;
+        const i = p * 4;
+        d[i] = Math.round(r / n);
+        d[i + 1] = Math.round(g / n);
+        d[i + 2] = Math.round(b / n);
+        next[p] = 0;
+        clean[p] = 1;
+        count--;
+      }
+    }
+    flagged.set(next);
+  }
+}
+
+/** Dilatation binaire séparable (rayon r) d'un masque 0/1. */
+function dilateMask(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const tmp = new Uint8Array(w * h);
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    let count = 0;
+    const row = y * w;
+    for (let x = -r; x <= r; x++) count += src[row + Math.min(w - 1, Math.max(0, x))];
+    for (let x = 0; x < w; x++) {
+      tmp[row + x] = count > 0 ? 1 : 0;
+      count += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let count = 0;
+    for (let y = -r; y <= r; y++) count += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = count > 0 ? 1 : 0;
+      count += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+    }
+  }
+  return out;
 }
 
 /**
