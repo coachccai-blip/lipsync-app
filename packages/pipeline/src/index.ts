@@ -17,3 +17,5 @@ export * from "./prepare.js";
 export * from "./srt.js";
 export * from "./projects.js";
 export * from "./check.js";
+export * from "./png.js";
+export * from "./personnage.js";

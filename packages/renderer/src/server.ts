@@ -68,7 +68,7 @@ export interface RunningServer {
   payload(): unknown;
 }
 
-export type JobType = "prepare" | "render" | "planche" | "image";
+export type JobType = "prepare" | "render" | "planche" | "image" | "personnage";
 export type JobStatus = "en_attente" | "en_cours" | "termine" | "erreur" | "annule";
 
 export interface JobEvent {
@@ -225,8 +225,29 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     setStatus(job, "en_cours");
     try {
       if (controller.signal.aborted) throw new Error("annulé");
-      const dir = projectDir(job.project);
       const o = job.options;
+      if (job.type === "personnage") {
+        const { generatePersonnage } = await import("@avatar/pipeline");
+        const r = await generatePersonnage({
+          photo: String(o.photo),
+          nom: job.project,
+          root,
+          quality: (o.qualite as "low" | "medium" | "high") ?? "high",
+          sansMains: Boolean(o.sansMains),
+          seulement: Array.isArray(o.seulement) ? (o.seulement as string[]) : undefined,
+          zones: (o.zones as Record<string, unknown>) ?? undefined,
+          force: Boolean(o.force),
+          signal: controller.signal,
+          onProgress: (done, total, file) => {
+            job.progress = { done, total };
+            pushJobEvent(job, { type: "progress", done, total, message: file });
+          },
+        });
+        const rel = path.relative(path.join(root, "assets"), r.dir).split(path.sep).join("/");
+        setStatus(job, "termine", { result: { model: r.model, files: r.files, skipped: r.skipped, planche: r.planche ? `/personnages/${rel}/${path.basename(r.planche)}?ts=${Date.now()}` : undefined } });
+        return;
+      }
+      const dir = projectDir(job.project);
       if (job.type === "prepare") {
         const kind = String(o.kind ?? "audio");
         const source = path.join(dir, "source", path.basename(String(o.file ?? "")));
@@ -389,6 +410,34 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     // ---- jobs ----
     if (p === "/api/jobs" && req.method === "GET") {
       return json(res, { jobs: [...jobs.values()].map(({ events, ...j }) => ({ ...j, eventCount: events.length })).reverse() });
+    }
+    if (p === "/api/personnages" && req.method === "POST") {
+      // photo en corps binaire ; options dans la query (nom, qualite, sansMains, seulement, force, zones JSON)
+      const { safePersonnageName } = await import("@avatar/pipeline");
+      const nom = safePersonnageName(url.searchParams.get("nom") ?? "");
+      const ext = (url.searchParams.get("ext") ?? "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+      const body = await readBody(req, 64 * 1024 * 1024);
+      const dir = path.join(root, "assets", nom);
+      mkdirSync(dir, { recursive: true });
+      let photo = path.join(dir, `${nom}_source.${ext}`);
+      if (body.length > 0) writeFileSync(photo, body);
+      else if (existsSync(path.join(dir, `${nom}_source.png`))) photo = path.join(dir, `${nom}_source.png`);
+      else throw new HttpError(400, "photo manquante");
+      const seulement = (url.searchParams.get("seulement") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+      const zonesRaw = url.searchParams.get("zones");
+      const job: Job = {
+        id: randomUUID().slice(0, 8),
+        type: "personnage",
+        project: nom,
+        options: { photo, qualite: url.searchParams.get("qualite") ?? "high", sansMains: url.searchParams.get("sansMains") === "1", force: url.searchParams.get("force") === "1", seulement: seulement.length ? seulement : undefined, zones: zonesRaw ? JSON.parse(zonesRaw) : undefined },
+        status: "en_attente",
+        createdAt: new Date().toISOString(),
+        events: [],
+      };
+      enqueue(job);
+      const { events, ...summary } = job;
+      void events;
+      return json(res, summary, 201);
     }
     if (p === "/api/jobs" && req.method === "POST") {
       const body = JSON.parse((await readBody(req)).toString() || "{}") as { type?: JobType; project?: string; options?: Record<string, unknown> };

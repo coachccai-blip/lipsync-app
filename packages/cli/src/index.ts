@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command, InvalidArgumentError } from "commander";
 import { config as loadEnv } from "dotenv";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { PerformanceValidationError, makeTestPerformance } from "@avatar/shared";
 import { ToolNotFoundError, checkEnvironment, configVocab, loadConfig, loadPerformance, log, prepare, repoRoot, resolveTool, run, writePerformance } from "@avatar/pipeline";
@@ -126,6 +126,34 @@ program
       }
     }
     await renderPoseSheet({ projectDir: projet, out: opts.out ?? path.join(projet, "planche.png"), bones, emotions: opts.emotions, tile: opts.tile });
+  });
+
+program
+  .command("personnage")
+  .description("Génère une marionnette 2D (26 images) à partir d'une photo via l'API OpenAI, dans assets/<nom>/")
+  .requiredOption("--depuis <photo>", "photo du personnage (png, jpg, webp)")
+  .requiredOption("--nom <nom>", "nom du personnage (dossier assets/<nom>/ et préfixe des fichiers)")
+  .option("--qualite <q>", "low | medium | high (défaut : high)", "high")
+  .option("--sans-mains", "ne pas générer les 4 images de mains")
+  .option("--seulement <liste>", "ne (re)générer que ces images, séparées par des virgules (ex. bouche_D,emotion_enjoue)")
+  .option("--zones <fichier.json>", "zones de masque personnalisées (fractions de l'image)")
+  .option("--force", "regénérer les images existantes")
+  .action(async (opts) => {
+    const { generatePersonnage } = await import("@avatar/pipeline");
+    const zones = opts.zones ? JSON.parse(readFileSync(opts.zones, "utf8")) : undefined;
+    const r = await generatePersonnage({
+      photo: opts.depuis,
+      nom: opts.nom,
+      quality: opts.qualite,
+      sansMains: Boolean(opts.sansMains),
+      seulement: opts.seulement ? String(opts.seulement).split(",").map((x: string) => x.trim()).filter(Boolean) : undefined,
+      zones,
+      force: Boolean(opts.force),
+      onProgress: (done, total, file) => log.info(`${done}/${total} ${file}`),
+    });
+    log.done(`Personnage prêt : ${r.model} (${r.files.length} images${r.skipped.length ? `, ${r.skipped.length} déjà présentes` : ""})`);
+    if (r.planche) log.info(`Planche de contrôle : ${r.planche}`);
+    log.info("Dans le studio : Réglages → Personnage. Vérification complète : npm run verif-marionnette <projet> <dossier> " + r.model);
   });
 
 program

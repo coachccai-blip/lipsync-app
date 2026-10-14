@@ -28,7 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "rendu", label: "Rendu" },
   { id: "journal", label: "Journal" },
 ];
-const JOB_LABELS: Record<JobSummary["type"], string> = { prepare: "Préparation", render: "Rendu", planche: "Planche", image: "Image" };
+const JOB_LABELS: Record<JobSummary["type"], string> = { prepare: "Préparation", render: "Rendu", planche: "Planche", image: "Image", personnage: "Personnage" };
 
 /**
  * Application studio : projets, préparation, lecture, timeline éditable, réglages en direct,
@@ -876,6 +876,130 @@ export class StudioApp {
     }
   }
 
+  /** Section « Nouveau personnage depuis une photo » (génération par l'API OpenAI, masques par zone). */
+  private renderNouveauPersonnage(el: HTMLElement): void {
+    const details = h("details.section", { open: localStorage.getItem("avatar-sec-personnage") === "1" });
+    details.addEventListener("toggle", () => localStorage.setItem("avatar-sec-personnage", details.open ? "1" : "0"));
+    const body = h("div.body");
+    const hasKey = (this.envItems ?? []).find((i) => i.id === "OPENAI_API_KEY")?.ok ?? false;
+    const nom = h("input", { type: "text", placeholder: "nom (ex. lydia)", style: { width: "160px" } });
+    const photo = h("input", { type: "file", accept: ".png,.jpg,.jpeg,.webp" });
+    const qualite = h("select", null, ...["high", "medium", "low"].map((q) => h("option", { value: q }, { high: "haute (≈ 0,17 $/image)", medium: "moyenne (≈ 0,06 $/image)", low: "basse (≈ 0,02 $/image)" }[q])));
+    const mains = h("input", { type: "checkbox", checked: true });
+    const preview = h("canvas", { width: 320, height: 320, style: { width: "320px", height: "320px", borderRadius: "8px", background: "var(--bg-3)" } });
+    const zones = { bouche: { x: 0.33, y: 0.5, w: 0.34, h: 0.2 }, yeux: { x: 0.25, y: 0.33, w: 0.5, h: 0.15 }, sourcilsYeux: { x: 0.23, y: 0.25, w: 0.54, h: 0.25 }, visage: { cx: 0.5, cy: 0.42, rx: 0.28, ry: 0.36 } };
+    let img: HTMLImageElement | undefined;
+    const draw = () => {
+      const ctx = preview.getContext("2d")!;
+      const S = preview.width;
+      ctx.clearRect(0, 0, S, S);
+      if (img) {
+        const side = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, S, S);
+      }
+      const rect = (r: { x: number; y: number; w: number; h: number }, color: string, label: string) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(r.x * S, r.y * S, r.w * S, r.h * S);
+        ctx.fillStyle = color;
+        ctx.font = "11px sans-serif";
+        ctx.fillText(label, r.x * S + 3, r.y * S + 12);
+      };
+      rect(zones.sourcilsYeux, "#f0b429", "sourcils + yeux");
+      rect(zones.yeux, "#2f6fe4", "yeux");
+      rect(zones.bouche, "#e0245e", "bouche");
+      ctx.strokeStyle = "#2fb36a";
+      ctx.beginPath();
+      ctx.ellipse(zones.visage.cx * S, zones.visage.cy * S, zones.visage.rx * S, zones.visage.ry * S, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#2fb36a";
+      ctx.fillText("visage (conservé pour les mains)", zones.visage.cx * S - 70, (zones.visage.cy + zones.visage.ry) * S + 12);
+    };
+    photo.addEventListener("change", () => {
+      const f = photo.files?.[0];
+      if (!f) return;
+      const im = new Image();
+      im.onload = () => { img = im; draw(); };
+      im.src = URL.createObjectURL(f);
+      if (!nom.value) nom.value = f.name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    });
+    const slider = (label: string, get: () => number, set: (v: number) => void, min: number, max: number) => {
+      const r = h("input", { type: "range", min, max, step: 0.01, value: get(), style: { width: "110px" } });
+      r.addEventListener("input", () => { set(Number(r.value)); draw(); });
+      return h("label.control", null, h("span", null, label), r);
+    };
+    const zoneControls = h("div.controls", { style: { gridTemplateColumns: "1fr 1fr" } },
+      slider("Bouche : haut", () => zones.bouche.y, (v) => (zones.bouche.y = v), 0.4, 0.75),
+      slider("Bouche : hauteur", () => zones.bouche.h, (v) => (zones.bouche.h = v), 0.08, 0.3),
+      slider("Bouche : gauche", () => zones.bouche.x, (v) => (zones.bouche.x = v), 0.15, 0.5),
+      slider("Bouche : largeur", () => zones.bouche.w, (v) => (zones.bouche.w = v), 0.15, 0.6),
+      slider("Yeux : haut", () => zones.yeux.y, (v) => { zones.yeux.y = v; zones.sourcilsYeux.y = v - 0.08; }, 0.2, 0.55),
+      slider("Yeux : hauteur", () => zones.yeux.h, (v) => { zones.yeux.h = v; zones.sourcilsYeux.h = v + 0.1; }, 0.08, 0.3),
+      slider("Yeux : gauche", () => zones.yeux.x, (v) => { zones.yeux.x = v; zones.sourcilsYeux.x = v - 0.02; }, 0.1, 0.4),
+      slider("Yeux : largeur", () => zones.yeux.w, (v) => { zones.yeux.w = v; zones.sourcilsYeux.w = v + 0.04; }, 0.2, 0.7),
+      slider("Visage : centre vertical", () => zones.visage.cy, (v) => (zones.visage.cy = v), 0.25, 0.6),
+      slider("Visage : rayon vertical", () => zones.visage.ry, (v) => (zones.visage.ry = v), 0.2, 0.5),
+    );
+    const result = h("div");
+    const launch = h("button.primary", { disabled: !hasKey, onclick: async () => {
+      const f = photo.files?.[0];
+      if (!nom.value.trim()) return this.toast("Donnez un nom au personnage.", "warn");
+      if (!f) return this.toast("Choisissez une photo.", "warn");
+      launch.disabled = true;
+      clear(result);
+      const log = h("pre.log", { style: { maxHeight: "160px", overflow: "auto" } });
+      const bar = h("div.progress", null, h("div", { style: { width: "0%" } }));
+      result.append(bar, log);
+      try {
+        const job = await api.personnage(nom.value.trim(), f, { qualite: qualite.value, sansMains: !mains.checked, force: false, zones });
+        const status = await api.followJob(job.id, (ev) => {
+          if (ev.type === "log" && ev.message) {
+            log.append(`${ev.message}\n`);
+            log.scrollTop = log.scrollHeight;
+          }
+          if (ev.type === "progress" && ev.total) {
+            (bar.firstElementChild as HTMLElement).style.width = `${Math.round((100 * (ev.done ?? 0)) / ev.total)}%`;
+            log.append(`${ev.done}/${ev.total} ${ev.message ?? ""}\n`);
+          }
+          if (ev.type === "status" && ev.status === "termine" && ev.result) {
+            const r = ev.result as { model: string; files: string[]; planche?: string };
+            result.append(
+              h("p", null, `${r.files.length} images générées. Vérifiez la planche : chaque image ne doit changer que sa zone. Pour en refaire une : `, h("code", null, `avatar personnage --depuis photo --nom ${nom.value.trim()} --seulement bouche_D`)),
+              ...(r.planche ? [h("img", { src: r.planche, style: { maxWidth: "100%", borderRadius: "8px" } })] : []),
+              h("div.row", null, h("button.primary", { onclick: () => {
+                if (!this.cfg) return;
+                this.cfg.scene.model = r.model;
+                if (this.payload) this.payload.modelUrl = this.modelUrlFor(r.model);
+                this.onConfigEdited("scene");
+                void this.saveConfig("scene");
+                this.toast(`Personnage « ${nom.value.trim()} » sélectionné`, "ok");
+              } }, "Utiliser ce personnage")),
+            );
+            void api.check().then((c) => { this.models = c.models; }).catch(() => undefined);
+          }
+          if (ev.type === "status" && ev.status === "erreur") result.append(h("p.err", null, ev.message ?? "erreur"));
+        });
+        this.toast(status === "termine" ? "Personnage généré" : `Génération : ${status}`, status === "termine" ? "ok" : "err");
+      } catch (e) {
+        this.toast((e as Error).message, "err");
+      } finally {
+        launch.disabled = false;
+      }
+    } }, icon("plus", 14), "Générer les 26 images");
+    body.append(
+      h("p.hint", null, hasKey ? "À partir d'une photo (buste de face, fond uni), l'API OpenAI génère la base puis chaque variante avec un masque : tout ce qui est hors de la zone colorée est conservé au pixel près. Comptez 2 à 5 $ et quelques minutes par personnage." : "Clé OpenAI absente : ajoutez OPENAI_API_KEY dans .env puis relancez le studio."),
+      h("div.row", null, h("label", null, "Nom ", nom), h("label", null, "Photo ", photo)),
+      h("div.row", null, h("label", null, "Qualité ", qualite), h("label", null, mains, " générer les 4 images de mains")),
+      h("div.row", { style: { alignItems: "flex-start" } }, preview, zoneControls),
+      h("p.hint", null, "Ajustez les zones pour qu'elles couvrent bien la bouche (avec le menton pour la grande ouverture) et les yeux avec les sourcils. L'ellipse verte est la partie du visage que les images de mains ne peuvent pas modifier."),
+      h("div.row", null, launch),
+      result,
+    );
+    details.append(h("summary", null, "Nouveau personnage depuis une photo"), body);
+    el.append(details);
+    draw();
+  }
+
   private renderProjet(el: HTMLElement): void {
     if (this.mode === "demo") {
       el.append(
@@ -890,6 +1014,7 @@ export class StudioApp {
     const s = this.summary;
     if (!this.current) {
       el.append(h("div.empty", null, "Créez un projet avec le bouton « + Projet » pour commencer."));
+      this.renderNouveauPersonnage(el);
       return;
     }
     el.append(h("div.row", null, h("h3", { style: { margin: "4px 0", flex: 1 } }, `Projet « ${this.current} »`), h("button.small.danger", { title: "Supprimer le projet et tous ses fichiers", onclick: async () => {
@@ -915,6 +1040,7 @@ export class StudioApp {
     } else dl.append(h("dt", null, "État"), h("dd", null, "pas encore préparé"));
     el.append(dl);
 
+    this.renderNouveauPersonnage(el);
     el.append(h("h3", null, "Source"));
     const fileInput = h("input", { type: "file", accept: ".mp3,.wav,.m4a,.ogg,.flac,.txt,.md", style: { display: "none" } });
     fileInput.addEventListener("change", async () => {

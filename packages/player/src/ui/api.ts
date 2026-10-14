@@ -24,7 +24,7 @@ export interface CheckItem {
 
 export interface JobSummary {
   id: string;
-  type: "prepare" | "render" | "planche" | "image";
+  type: "prepare" | "render" | "planche" | "image" | "personnage";
   project: string;
   status: "en_attente" | "en_cours" | "termine" | "erreur" | "annule";
   createdAt: string;
@@ -75,6 +75,14 @@ export const api = {
   config: () => req<{ config: AllConfig; files: Record<string, unknown> }>("/api/config"),
   saveConfig: (name: keyof AllConfig, value: unknown) => req<{ ok: true; config: AllConfig }>(`/api/config/${name}`, { method: "PUT", body: JSON.stringify(value) }),
   jobs: () => req<{ jobs: JobSummary[] }>("/api/jobs"),
+  /** Lance la génération d'une marionnette depuis une photo (ou sans photo : reprise des images manquantes). */
+  personnage: (nom: string, photo: File | undefined, options: { qualite: string; sansMains: boolean; force: boolean; seulement?: string[]; zones?: unknown }) => {
+    const q = new URLSearchParams({ nom, qualite: options.qualite, sansMains: options.sansMains ? "1" : "0", force: options.force ? "1" : "0" });
+    if (photo) q.set("ext", photo.name.split(".").pop() ?? "png");
+    if (options.seulement?.length) q.set("seulement", options.seulement.join(","));
+    if (options.zones) q.set("zones", JSON.stringify(options.zones));
+    return req<JobSummary>(`/api/personnages?${q}`, { method: "POST", body: photo ?? new Blob([]) });
+  },
   startJob: (type: JobSummary["type"], project: string, options: Record<string, unknown>) => req<JobSummary>("/api/jobs", { method: "POST", body: JSON.stringify({ type, project, options }) }),
   cancelJob: (id: string) => req<{ ok: true }>(`/api/jobs/${id}/cancel`, { method: "POST" }),
   /** Suit un job : événements en direct, résolution à la fin. */

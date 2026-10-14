@@ -45,6 +45,16 @@ npm run avatar -- check   # bilan : outils, variables, modèle, player
 
 ### Marionnette 2D (personnage illustré)
 
+**Générer un personnage automatiquement** (API OpenAI, clé `OPENAI_API_KEY` dans `.env`, facturation activée) : dans le studio, onglet Projet → « Nouveau personnage depuis une photo » (nom, photo de buste de face sur fond uni, qualité, zones ajustables sur l'aperçu), ou en ligne de commande :
+
+```bash
+npm run avatar -- personnage --depuis photo.png --nom lydia            # 26 images dans assets/lydia/
+npm run avatar -- personnage --depuis photo.png --nom lydia --seulement bouche_D,emotion_enjoue   # en refaire certaines
+npm run avatar -- personnage --depuis photo.png --nom lydia --sans-mains --qualite medium
+```
+
+Chaque image est produite par l'endpoint d'édition de `gpt-image-1` avec un **masque** : la base est éditée dans la zone de la bouche (bouche fermée neutre), puis chaque variante est éditée à partir de la base dans sa zone (bouche, yeux, sourcils + yeux, ou tout sauf le visage pour les mains). Hors du masque, l'image est conservée au pixel près : l'alignement des calques est garanti par construction. Le manifeste est écrit automatiquement, une planche de contrôle `<nom>_planche.png` est produite, et le personnage apparaît dans Réglages → Personnage. Comptez 0,02 à 0,17 $ par image selon la qualité (2 à 5 $ par personnage), et vérifiez la planche : une image ratée se refait seule avec `--seulement`. Les zones par défaut conviennent à un buste de face centré ; `--zones zones.json` (fractions de l'image : `bouche`, `yeux`, `sourcilsYeux`, `visage`) ou les curseurs du studio les adaptent.
+
 Deux personnages sont fournis : `assets/marionnette/` (homme en costume) et `assets/capboy/` (garçon à casquette bleue, 26 images : bouches, clignements, émotions, regards, sourires, mains). Le choix se fait dans **Réglages → Personnage** (studio et page GitHub Pages) et s'applique immédiatement ; le studio l'enregistre dans `config/scene.json` (`scene.model`). Pour ajouter un personnage : un dossier `assets/<nom>/` avec ses images et un `marionnette.json` (prompts types dans `docs/prompts-marionnette-casquette.xlsx`), il apparaît automatiquement dans la liste et dans la page publiée.
 
 Les zones bouche et yeux sont détectées par **consensus** entre les images d'un même groupe (blocs modifiés par une majorité d'entre elles, étendus aux blocs connectés de chaque image) : une bouche générée qui aurait aussi retouché les sourcils n'élargit pas la zone. Une image de main dont la tête est plus petite ou décalée peut être recalée sur la base (échelle + translation) avant d'être déposée ; c'est ce qui a été fait pour trois images de `capboy`.

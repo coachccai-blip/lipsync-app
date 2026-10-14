@@ -43,6 +43,7 @@ export function checkEnvironment(options: { root?: string; findChrome?: () => st
     { id: "AZURE_SPEECH_REGION", label: "Région Azure Speech", secret: false, impact: "mode B (synthèse vocale)" },
     { id: "ANTHROPIC_API_KEY", label: "Clé Anthropic", secret: true, impact: "annotation automatique des expressions et gestes" },
     { id: "ANTHROPIC_MODEL", label: "Modèle Anthropic", secret: false, impact: "annotation (défaut : claude-opus-5)" },
+    { id: "OPENAI_API_KEY", label: "Clé OpenAI", secret: true, impact: "génération automatique des personnages (avatar personnage)" },
   ];
   for (const e of envs) {
     const v = process.env[e.id];
