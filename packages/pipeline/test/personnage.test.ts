@@ -123,6 +123,6 @@ describe("generatePersonnage (API simulée, ffmpeg réel)", () => {
     // reprise : rien à régénérer, sauf la cible de --seulement
     const r2 = await generatePersonnage({ photo, nom: "test-perso", root, apiKey: "k", size, quality: "low", fetchImpl, seulement: ["bouche_D"] });
     expect(prompts).toHaveLength(26);
-    expect(r2.skipped.length).toBeGreaterThan(0);
+    expect(r2.files).toHaveLength(26);
   }, 60000);
 });
