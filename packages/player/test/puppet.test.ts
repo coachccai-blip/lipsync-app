@@ -133,20 +133,25 @@ describe("marionnette 2D : zone par consensus", () => {
 describe("marionnette 2D : détourage et suppression de la dominante", () => {
   it("rend le fond transparent, retire le bleu des bords mélangés, préserve le bleu intérieur", () => {
     const key: [number, number, number] = [40, 178, 254];
-    const W = 24;
+    const W = 128;
     const H = 1;
     const data = new Uint8ClampedArray(W * H * 4);
     const set = (x: number, c: [number, number, number]) => { data.set([...c, 255], x * 4); };
     for (let x = 0; x < W; x++) set(x, x < 4 ? key : [120, 90, 70]); // fond à gauche, cheveux ensuite
     set(5, [52, 100, 162]); // mèche mélangée au fond, près du bord
-    set(20, [30, 40, 120]); // vêtement bleu sombre, loin du bord
-    set(21, [52, 100, 162]); // même couleur que la mèche mais loin du bord : intacte
+    set(30, [52, 100, 162]); // teinte du fond jusqu'à 40 px du bord : corrigée aussi
+    set(100, [30, 40, 120]); // vêtement bleu sombre, loin du bord
+    set(101, [52, 100, 162]); // même couleur que la mèche mais loin du bord : intacte
     const img = { data, width: W, height: H } as unknown as ImageData;
     keyOut(img, key, 0.12);
     expect(data[3]).toBe(0);
     expect(data[4 * 4 + 3]).toBe(255);
-    expect([data[5 * 4], data[5 * 4 + 1], data[5 * 4 + 2]]).toEqual([120, 90, 70]); // repeint avec la couleur des cheveux voisins
-    expect([data[20 * 4], data[20 * 4 + 1], data[20 * 4 + 2]]).toEqual([30, 40, 120]);
-    expect([data[21 * 4], data[21 * 4 + 1], data[21 * 4 + 2]]).toEqual([52, 100, 162]);
+    // repeint avec la teinte des cheveux profonds (brun : R > G > B), luminance proche de l'origine
+    expect(data[5 * 4]).toBeGreaterThan(data[5 * 4 + 1]);
+    expect(data[5 * 4 + 1]).toBeGreaterThan(data[5 * 4 + 2]);
+    expect(data[30 * 4]).toBeGreaterThan(data[30 * 4 + 1]);
+    expect(data[30 * 4 + 1]).toBeGreaterThan(data[30 * 4 + 2]);
+    expect([data[100 * 4], data[100 * 4 + 1], data[100 * 4 + 2]]).toEqual([30, 40, 120]);
+    expect([data[101 * 4], data[101 * 4 + 1], data[101 * 4 + 2]]).toEqual([52, 100, 162]);
   });
 });

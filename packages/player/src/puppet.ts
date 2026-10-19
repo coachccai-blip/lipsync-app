@@ -97,67 +97,143 @@ export function keyOut(img: ImageData, key: [number, number, number], tolerance:
     transparent[p] = d[i + 3] < 128 ? 1 : 0;
   }
   if (keyExcess < 40) return;
-  // suppression de la dominante (despill) près du bord détouré : un pixel conservé, à quelques
-  // pixels du fond, dont le canal du fond dépasse les deux autres a été mélangé au fond (mèches
-  // de cheveux, bords flous) ; on ramène ce canal au niveau des autres. Les zones intérieures
-  // (vêtement ou casquette bleus) ne sont pas touchées.
-  // Les pixels contaminés sont repeints avec la couleur des pixels sains voisins (extension de
-  // la couleur intérieure vers le bord), l'alpha restant inchangé : la mèche garde sa finesse
-  // mais prend la couleur des cheveux au lieu d'un mélange fond + cheveux.
-  // rayon large : des mèches ondulées laissent passer le fond loin du bord franc
-  const R = 16;
+  despill(d, w, h, transparent, dominant, others);
+}
+
+/**
+ * Suppression de la dominante du fond (despill) dans la bande du bord détouré.
+ *
+ * Près du bord, la lumière du fond (bleu, vert…) teinte les pixels conservés : mèches de cheveux
+ * fines, bords flous, reflets. La teinte peut pénétrer à plusieurs dizaines de pixels du bord
+ * franc. Chaque pixel de la bande reçoit une couleur de référence propagée depuis les pixels
+ * profonds (opaques, au-delà de la bande), de proche en proche ; s'il est plus chargé en canal
+ * du fond que cette référence (à luminance égale), il est repeint avec la teinte de la référence
+ * en conservant sa propre luminance : la mèche garde son dessin et son ombrage, mais prend la
+ * couleur des cheveux. Un pixel conforme à sa référence n'est pas touché, et une zone de la
+ * couleur du fond (casquette bleue) garde sa couleur puisque sa référence profonde est bleue.
+ * Les pixels jamais atteints (îlots isolés) perdent simplement leur excès de canal du fond.
+ */
+function despill(d: Uint8ClampedArray, w: number, h: number, transparent: Uint8Array, dominant: number, others: number[]): void {
+  // la teinte du fond pénètre loin dans des cheveux fins et ondulés
+  const R = 40;
   const nearEdge = dilateMask(transparent, w, h, R);
-  // pixels contaminés : près du bord, encore visibles (alpha > 0, y compris semi-transparents),
-  // canal du fond en excès
   const flagged = new Uint8Array(w * h);
-  const clean = new Uint8Array(w * h); // voisins utilisables : opaques et non contaminés
-  let count = 0;
+  const deep = new Uint8Array(w * h); // référence disponible
+  const ref = new Float32Array(w * h * 3);
+  let frontier: number[] = [];
+  const queued = new Uint8Array(w * h);
   for (let i = 0, p = 0; i < d.length; i += 4, p++) {
     if (d[i + 3] === 0) continue;
-    const excess = d[i + dominant] - Math.max(d[i + others[0]], d[i + others[1]]);
-    const dist = Math.max(Math.abs(d[i] - key[0]), Math.abs(d[i + 1] - key[1]), Math.abs(d[i + 2] - key[2]));
-    const contaminated = nearEdge[p] && excess >= 12 && dist <= 220;
-    if (contaminated) {
-      flagged[p] = 1;
-      count++;
-    } else if (d[i + 3] >= 128) clean[p] = 1;
+    if (nearEdge[p]) flagged[p] = 1;
+    else if (d[i + 3] >= 128) {
+      deep[p] = 1;
+      ref[p * 3] = d[i];
+      ref[p * 3 + 1] = d[i + 1];
+      ref[p * 3 + 2] = d[i + 2];
+    }
   }
-  if (!count) return;
-  for (let pass = 0; pass < R + 4 && count > 0; pass++) {
-    const next = new Uint8Array(flagged);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const p = y * w + x;
-        if (!flagged[p]) continue;
-        let r = 0;
-        let g = 0;
-        let b = 0;
-        let n = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-            const q = ny * w + nx;
-            if (!clean[q]) continue;
-            const j = q * 4;
-            r += d[j];
-            g += d[j + 1];
-            b += d[j + 2];
-            n++;
+  // front initial : pixels de la bande adjacents à un pixel profond
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (!deep[p]) continue;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const q = ny * w + nx;
+          if (flagged[q] && !queued[q]) {
+            queued[q] = 1;
+            frontier.push(q);
           }
         }
-        if (!n) continue;
-        const i = p * 4;
-        d[i] = Math.round(r / n);
-        d[i + 1] = Math.round(g / n);
-        d[i + 2] = Math.round(b / n);
-        next[p] = 0;
-        clean[p] = 1;
-        count--;
       }
     }
-    flagged.set(next);
+  }
+  const luma = (r: number, g: number, b: number) => 0.299 * r + 0.587 * g + 0.114 * b;
+  const vals = new Float32Array(3);
+  while (frontier.length) {
+    const next: number[] = [];
+    const computed = new Float32Array(frontier.length * 3);
+    for (let k = 0; k < frontier.length; k++) {
+      const p = frontier[k];
+      const x = p % w;
+      const y = (p - x) / w;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const q = ny * w + nx;
+          if (!deep[q]) continue;
+          r += ref[q * 3];
+          g += ref[q * 3 + 1];
+          b += ref[q * 3 + 2];
+          n++;
+        }
+      }
+      computed[k * 3] = r / n;
+      computed[k * 3 + 1] = g / n;
+      computed[k * 3 + 2] = b / n;
+    }
+    for (let k = 0; k < frontier.length; k++) {
+      const p = frontier[k];
+      const i = p * 4;
+      vals[0] = computed[k * 3];
+      vals[1] = computed[k * 3 + 1];
+      vals[2] = computed[k * 3 + 2];
+      ref[p * 3] = vals[0];
+      ref[p * 3 + 1] = vals[1];
+      ref[p * 3 + 2] = vals[2];
+      const lp = luma(d[i], d[i + 1], d[i + 2]);
+      const lr = Math.max(1, luma(vals[0], vals[1], vals[2]));
+      const scale = lp / lr;
+      // excès de canal du fond attendu à cette luminance d'après la référence
+      const expected = (vals[dominant] - Math.max(vals[others[0]], vals[others[1]])) * scale;
+      const excess = d[i + dominant] - Math.max(d[i + others[0]], d[i + others[1]]);
+      if (excess > expected + 6) {
+        // teinte de la référence, luminance du pixel (la contamination éclaircit un peu : la
+        // luminance est légèrement ramenée vers celle de la référence)
+        const kk = Math.min(2.5, (0.7 * lp + 0.3 * lr) / lr);
+        d[i] = Math.round(Math.min(255, vals[0] * kk));
+        d[i + 1] = Math.round(Math.min(255, vals[1] * kk));
+        d[i + 2] = Math.round(Math.min(255, vals[2] * kk));
+        ref[p * 3] = d[i];
+        ref[p * 3 + 1] = d[i + 1];
+        ref[p * 3 + 2] = d[i + 2];
+      }
+      flagged[p] = 0;
+      deep[p] = 1;
+    }
+    for (let k = 0; k < frontier.length; k++) {
+      const p = frontier[k];
+      const x = p % w;
+      const y = (p - x) / w;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const q = ny * w + nx;
+          if (flagged[q] && !queued[q]) {
+            queued[q] = 1;
+            next.push(q);
+          }
+        }
+      }
+    }
+    frontier = next;
+  }
+  for (let p = 0; p < flagged.length; p++) {
+    if (!flagged[p]) continue;
+    const i = p * 4;
+    const cap = Math.max(d[i + others[0]], d[i + others[1]]);
+    if (d[i + dominant] > cap) d[i + dominant] = cap;
   }
 }
 
