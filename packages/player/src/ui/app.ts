@@ -618,7 +618,7 @@ export class StudioApp {
       seed: 12345,
     };
     const vocab = { emotions: Object.keys(cfg.emotions.emotions), gestures: Object.keys(cfg.gestures.procedural) };
-    const auto = autoTracks(perf, vocab);
+    const auto = autoTracks(perf, vocab, { maxSegment: cfg.emotions.dureeMax ?? 10 });
     perf.expressions = auto.expressions;
     perf.gestures = auto.gestures;
     return perf;
@@ -631,7 +631,7 @@ export class StudioApp {
     const vocab = { emotions: Object.keys(this.cfg.emotions.emotions), gestures: Object.keys(this.cfg.gestures.procedural) };
     const keptE = this.perf.expressions.filter((e) => e.source === "balise" || e.source === "manuel");
     const keptG = this.perf.gestures.filter((g) => g.source === "balise" || g.source === "manuel");
-    const auto = autoTracks({ ...this.perf, expressions: [], gestures: [] }, vocab);
+    const auto = autoTracks({ ...this.perf, expressions: [], gestures: [] }, vocab, { maxSegment: this.cfg.emotions.dureeMax ?? 10 });
     // les segments conservés découpent les segments automatiques
     let expressions = auto.expressions;
     for (const k of keptE) {

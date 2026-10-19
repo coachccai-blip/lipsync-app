@@ -2,6 +2,7 @@
   "_doc": "Poses de blendshapes de chaque émotion (vocabulaire fermé du LLM et des balises), durée de fondu, atténuation de la zone bouche pendant la parole.",
   "fadeMs": 400,
   "speechAttenuation": 0.4,
+  "dureeMax": 10,
   "mouthZone": [
     "jawForward",
     "jawLeft",

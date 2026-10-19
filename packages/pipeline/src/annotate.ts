@@ -61,7 +61,7 @@ export function buildPrompt(sentences: SentenceInput[], vocab: AnnotationVocab):
     `Gestes autorisés (uniquement) : ${vocab.gestures.join(", ")}.`,
     "",
     "Sobriété : au plus un geste marqué toutes les 4 à 6 secondes. Le reste du temps, aucun geste (posture d'écoute active).",
-    "Les émotions doivent rester crédibles et peu nombreuses : « neutre » est un bon choix par défaut, ne change d'émotion que quand le texte le justifie.",
+    "Les émotions doivent rester crédibles et suivre le discours : varie-les au fil des phrases (une question appelle surpris ou pensif, une bonne nouvelle enjoué ou enthousiaste, un avertissement sérieux ou inquiet, une confidence complice). Ne garde jamais la même émotion plus de 10 secondes d'affilée : change au moins à chaque nouvelle idée, et reviens à « neutre » entre deux temps forts.",
     "Le champ « word » d'un geste doit reprendre exactement un mot de la phrase indiquée.",
     "Réponds uniquement avec le JSON demandé.",
   ].join("\n");

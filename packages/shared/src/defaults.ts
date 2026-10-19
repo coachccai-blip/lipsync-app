@@ -26,6 +26,7 @@ export const DEFAULT_VISEMES: VisemeConfig = {
 export const DEFAULT_EMOTIONS: EmotionConfig = {
   fadeMs: 400,
   speechAttenuation: 0.4,
+  dureeMax: 10,
   mouthZone: MOUTH_ZONE,
   emotions: {
     neutre: {},

@@ -131,6 +131,7 @@ export const SECTIONS: SectionSpec[] = [
     controls: [
       { path: "emotions.fadeMs", label: "Fondu (ms)", type: "range", min: 50, max: 1500, step: 10 },
       { path: "emotions.speechAttenuation", label: "Atténuation bouche pendant la parole", type: "range", min: 0, max: 1, step: 0.05 },
+      { path: "emotions.dureeMax", label: "Durée max d'une même émotion (s, pistes automatiques)", type: "range", min: 3, max: 30, step: 1 },
     ],
   },
   {

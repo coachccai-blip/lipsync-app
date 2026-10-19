@@ -1,5 +1,6 @@
 import type { ExpressionSegment, GestureEvent, Performance, VisemeCue, Word } from "../types.js";
 import { Prng } from "../prng.js";
+import { lexicalEmotion, varyEmotions } from "./variety.js";
 
 export interface AutoVocab {
   emotions: string[];
@@ -12,6 +13,8 @@ export interface AutoOptions {
   gestureMaxGap?: number;
   /** Durée minimale d'un segment d'émotion (s). */
   minSegment?: number;
+  /** Durée maximale d'une même émotion d'affilée (s), défaut 10. */
+  maxSegment?: number;
   /** Salut au début si la parole commence dans les 3 premières secondes. */
   greeting?: boolean;
   seed?: number;
@@ -84,6 +87,7 @@ export function autoTracks(perf: Performance, vocab: AutoVocab, options: AutoOpt
   const minGap = options.gestureMinGap ?? 4;
   const maxGap = options.gestureMaxGap ?? 6;
   const minSegment = options.minSegment ?? 1.5;
+  const maxSegment = options.maxSegment ?? 10;
   const has = (e: string) => vocab.emotions.includes(e);
   const gHas = (g: string) => vocab.gestures.includes(g);
 
@@ -114,7 +118,9 @@ export function autoTracks(perf: Performance, vocab: AutoVocab, options: AutoOpt
     const e = energies[i];
     const dens = accentsIn(s);
     let emotion: string;
-    if (/\?["»)]?$/.test(s.text)) emotion = pick(rng, ["surpris", "complice", "pensif"].filter(has));
+    const lex = lexicalEmotion(s.text, vocab.emotions);
+    if (lex && rng.chance(0.8)) emotion = lex;
+    else if (/\?["»)]?$/.test(s.text)) emotion = pick(rng, ["surpris", "complice", "pensif"].filter(has));
     else if (/!["»)]?$/.test(s.text)) emotion = pick(rng, ["enthousiaste", "enjoué"].filter(has));
     else if (e >= high && dens > 1.2) emotion = pick(rng, ["enthousiaste", "enjoué", "enjoué"].filter(has));
     else if (e >= high) emotion = pick(rng, ["enjoué", "enjoué", "complice"].filter(has));
@@ -122,16 +128,27 @@ export function autoTracks(perf: Performance, vocab: AutoVocab, options: AutoOpt
     else if (e <= low) emotion = pick(rng, ["sérieux", "neutre", "inquiet"].filter(has));
     else emotion = pick(rng, ["neutre", "enjoué", "sérieux", "complice"].filter(has));
     if (!emotion) emotion = "neutre";
-    // éviter de rester trop longtemps sur la même émotion, et les changements à chaque phrase
-    if (emotion === previous && rng.chance(0.35)) emotion = pick(rng, ["neutre", "enjoué", "sérieux"].filter(has).filter((x) => x !== previous)) ?? emotion;
+    // éviter de rester trop longtemps sur la même émotion : une répétition sur deux est remplacée
+    // par une émotion voisine ; au-delà de la durée maximale, le changement est obligatoire
+    const lastSeg = expressions[expressions.length - 1];
+    const runLength = lastSeg && lastSeg.emotion === emotion && s.start - lastSeg.end < 0.8 ? s.end - lastSeg.start : 0;
+    if (emotion === previous && (runLength + (s.end - s.start) > maxSegment || rng.chance(0.5))) {
+      const alt = ["neutre", "enjoué", "sérieux", "pensif", "complice", "surpris"].filter(has).filter((x) => x !== previous);
+      if (alt.length) emotion = pick(rng, alt);
+    }
     const intensity = Math.round((0.5 + 0.35 * Math.min(1, (e - low) / Math.max(0.05, high - low))) * 100) / 100;
     const last = expressions[expressions.length - 1];
     const start = Math.max(0, s.start - 0.15);
     const end = Math.min(perf.duration, s.end + 0.25);
-    if (last && last.emotion === emotion && start - last.end < 0.8) last.end = end;
+    if (last && last.emotion === emotion && start - last.end < 0.8 && end - last.start <= maxSegment) last.end = end;
     else if (emotion !== "neutre") expressions.push({ start: round(start), end: round(end), emotion, intensity, source: "procedural" });
     previous = emotion;
   });
+
+  // garde-fou : aucune émotion ne dure plus de maxSegment s (découpe aux fins de phrases)
+  const varied = varyEmotions(expressions, perf, vocab.emotions, { maxSegment, seed: options.seed });
+  expressions.length = 0;
+  expressions.push(...varied);
 
   // gestes : sur les accents, un toutes les 4 à 6 s, choisi selon l'émotion en cours
   const gestures: GestureEvent[] = [];

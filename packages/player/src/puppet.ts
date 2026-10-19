@@ -27,6 +27,8 @@ export interface PuppetManifest {
   smileEmotions?: string[];
   /** Mains : clé = nom de geste de la piste gestes (salut, explication, index, approbation…). */
   hands?: Record<string, string>;
+  /** Émotions sans image → image d'une émotion voisine (défaut : enthousiaste et complice → enjoué, inquiet → sérieux). */
+  emotionAliases?: Record<string, string>;
   /** Couleur de fond à rendre transparente ("auto" = coins de l'image, null = conserver). */
   keyColor?: string | "auto" | null;
   keyTolerance?: number;
@@ -503,6 +505,7 @@ export class Puppet {
   smileEmotions = new Set<string>(["enjoué"]);
   eyes: { half?: Layer; closed?: Layer } = {};
   emotions = new Map<string, Layer>();
+  emotionAliases: Record<string, string> = { enthousiaste: "enjoué", complice: "enjoué", inquiet: "sérieux" };
   gaze = new Map<string, Layer>();
   brows = new Map<string, Layer>();
   hands = new Map<string, Layer>();
@@ -537,6 +540,7 @@ export class Puppet {
     for (const [k, f] of Object.entries(manifest.mouthsSmile ?? {})) entries.push([`smile:${k}`, f]);
     for (const [k, f] of Object.entries(manifest.hands ?? {})) entries.push([`hand:${k}`, f]);
     if (manifest.smileEmotions) p.smileEmotions = new Set(manifest.smileEmotions);
+    if (manifest.emotionAliases) p.emotionAliases = { ...p.emotionAliases, ...manifest.emotionAliases };
     const loaded = await Promise.all(
       entries.map(async ([key, file]) => {
         try {
@@ -857,7 +861,9 @@ export class Puppet {
       const stretch = 1 + cfg.mouthEnergy * (e - 0.5) * 2 * frame.speaking;
       const sharp = Math.max(1, cfg.mouthSharpness ?? 4);
       const hardSwitch = sharp >= 3.5; // une seule bouche à la fois : jamais deux images superposées
-      const smiling = frame.emotionDisplayed !== undefined && this.smileEmotions.has(frame.emotionDisplayed) && this.mouthsSmile.size > 0;
+      // émotion affichée : image directe, sinon image de l'émotion voisine (alias)
+      const shown = frame.emotionDisplayed === undefined ? undefined : this.emotions.has(frame.emotionDisplayed) ? frame.emotionDisplayed : this.emotionAliases[frame.emotionDisplayed];
+      const smiling = shown !== undefined && this.smileEmotions.has(shown) && this.mouthsSmile.size > 0;
       const mouthLayer = (shape: string): Layer | undefined => (smiling ? this.mouthsSmile.get(shape) : undefined) ?? this.mouths.get(shape) ?? this.mouths.get(FALLBACK[shape] ?? "");
       const active = Object.entries(frame.shapes).filter(([shape, w]) => shape !== "X" && w > 0.002);
       let total = 0;
@@ -901,7 +907,7 @@ export class Puppet {
       }
       ctx.globalAlpha = 1;
       // yeux : une seule image d'émotion, changée pendant un clignement (jamais mélangée)
-      const emotionLayer = frame.emotionDisplayed ? this.emotions.get(frame.emotionDisplayed) : undefined;
+      const emotionLayer = shown ? this.emotions.get(shown) : undefined;
       if (emotionLayer) ctx.drawImage(emotionLayer.canvas, emotionLayer.rect.x, emotionLayer.rect.y);
       // regard : pupilles déplacées, seulement sur les yeux de base (une émotion garde ses propres yeux)
       const blink = frame.blink;

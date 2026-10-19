@@ -84,6 +84,8 @@ export interface EmotionConfig {
   mouthZone: string[];
   /** Pose de blendshapes de chaque émotion. */
   emotions: Record<string, MorphWeights>;
+  /** Durée maximale d'une même émotion d'affilée pour les pistes automatiques (s), défaut 10. */
+  dureeMax?: number;
 }
 
 export interface LifeConfig {

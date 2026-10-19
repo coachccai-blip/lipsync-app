@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { approximateLipsync, autoTracks, type AllConfig, type ExpressionSegment, type GestureEvent, type Performance, type VisemeCue, type Word } from "@avatar/shared";
+import { approximateLipsync, autoTracks, varyEmotions, type AllConfig, type ExpressionSegment, type GestureEvent, type Performance, type VisemeCue, type Word } from "@avatar/shared";
 import { audioDuration, normalizeAudio, pcmToWav, readWav } from "./audio.js";
 import { cachedStep, hashInputs } from "./cache.js";
 import { configVocab, loadConfig } from "./config.js";
@@ -265,7 +265,10 @@ export async function prepare(options: PrepareOptions): Promise<PrepareResult> {
     llmTracks = autoTracks(draft, vocab);
     log.info(`${llmTracks.expressions.length} segment(s) d'émotion, ${llmTracks.gestures.length} geste(s)`);
   }
-  const expressions = overrideSegments(llmTracks.expressions, tagTracks.expressions);
+  // variété : aucune émotion automatique (LLM ou procédurale) ne dure plus de emotions.dureeMax s
+  const draftForVariety = { words, visemes, duration, seed };
+  const variedLlm = varyEmotions(llmTracks.expressions, draftForVariety, vocab.emotions, { maxSegment: cfg.emotions.dureeMax ?? 10, seed });
+  const expressions = overrideSegments(variedLlm, tagTracks.expressions);
   const gestures = mergeGestures(llmTracks.gestures, tagTracks.gestures);
 
   checkAbort();
