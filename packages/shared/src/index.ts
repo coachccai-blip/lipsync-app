@@ -14,3 +14,4 @@ export * from "./anim/auto.js";
 export * from "./anim/variety.js";
 export * from "./dsp.js";
 export * from "./bubble.js";
+export * from "./video.js";

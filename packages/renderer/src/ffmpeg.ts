@@ -19,7 +19,9 @@ export interface EncodeOptions {
 /** Arguments ffmpeg : images PNG sur stdin + audio -> fichier final. */
 export function encodeArgs(o: EncodeOptions): string[] {
   const video: Record<OutputFormat, string[]> = {
-    mp4: ["-c:v", "libx264", "-crf", "16", "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-c:a", "aac", "-b:a", "192k"],
+    // conversion RGB → Y'CbCr explicitement en BT.709 plage limitée, et flux tagué en conséquence :
+    // sans cela, ffmpeg convertit en BT.601 sans le signaler et certains lecteurs décalent les couleurs
+    mp4: ["-vf", "scale=in_range=pc:out_range=tv:out_color_matrix=bt709", "-c:v", "libx264", "-crf", "16", "-preset", "slow", "-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-movflags", "+faststart", "-c:a", "aac", "-b:a", "192k"],
     prores4444: ["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le", "-c:a", "pcm_s16le"],
     "webm-alpha": ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-crf", "20", "-b:v", "0", "-c:a", "libopus"],
   };

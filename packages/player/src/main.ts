@@ -166,6 +166,11 @@ class Player {
     return this.post?.canvas;
   }
 
+  /** Canvas du grain (composé en overlay au-dessus du personnage), pour l'export dans le navigateur. */
+  grainCanvas(): HTMLCanvasElement | undefined {
+    return this.post?.grain;
+  }
+
   getDuration(): number {
     return this.perf?.duration ?? 0;
   }

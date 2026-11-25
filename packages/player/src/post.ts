@@ -3,23 +3,35 @@ import { Prng, type PostConfig } from "@avatar/shared";
 const TILE = 256;
 
 /**
- * Post-traitement dessiné sur un canvas posé au-dessus du personnage, dans la bulle :
- * vignettage doux des bords et grain fin. Le grain est déterministe : la graine dépend du
- * numéro d'image, donc la prévisualisation et le rendu hors ligne sont identiques.
+ * Post-traitement posé au-dessus du personnage, dans la bulle : vignettage doux des bords
+ * (canvas `canvas`, composition normale) et grain fin (canvas `grain`, composé en mode
+ * « overlay » : le bruit module les tons moyens et disparaît dans les noirs et les blancs,
+ * comme un grain argentique). Un grain simplement additif bruite aussi les zones sombres :
+ * l'encodeur vidéo y dépense beaucoup de bits et, dans les noirs, les pixels proches du seuil
+ * grésillent d'une image à l'autre. Le grain est déterministe : la graine dépend du numéro
+ * d'image, donc la prévisualisation et le rendu hors ligne sont identiques.
  */
 export class PostFX {
   readonly canvas: HTMLCanvasElement;
+  readonly grain: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly gctx: CanvasRenderingContext2D;
   private tile?: HTMLCanvasElement;
   private size = 0;
 
   constructor() {
+    const bubble = document.getElementById("bubble")!;
+    const ring = document.getElementById("ring");
+    this.grain = document.createElement("canvas");
+    this.grain.id = "grain";
+    this.grain.style.cssText = "position:absolute;inset:0;pointer-events:none;display:block;mix-blend-mode:overlay";
+    this.gctx = this.grain.getContext("2d")!;
+    bubble.insertBefore(this.grain, ring);
     this.canvas = document.createElement("canvas");
     this.canvas.id = "post";
     this.canvas.style.cssText = "position:absolute;inset:0;pointer-events:none;display:block";
     this.ctx = this.canvas.getContext("2d")!;
-    const bubble = document.getElementById("bubble")!;
-    bubble.insertBefore(this.canvas, document.getElementById("ring"));
+    bubble.insertBefore(this.canvas, ring);
   }
 
   private ensure(d: number): void {
@@ -27,6 +39,8 @@ export class PostFX {
     this.size = d;
     this.canvas.width = d;
     this.canvas.height = d;
+    this.grain.width = d;
+    this.grain.height = d;
   }
 
   private grainTile(): HTMLCanvasElement {
@@ -54,6 +68,7 @@ export class PostFX {
     this.ensure(d);
     const ctx = this.ctx;
     ctx.clearRect(0, 0, d, d);
+    this.gctx.clearRect(0, 0, d, d);
     if (!cfg) return;
     if (cfg.vignette > 0) {
       const g = ctx.createRadialGradient(d / 2, d / 2, d * 0.42, d / 2, d / 2, d * 0.72);
@@ -66,17 +81,19 @@ export class PostFX {
       const rng = new Prng(1000003 + frameIndex * 7919);
       const ox = Math.floor(rng.next() * TILE);
       const oy = Math.floor(rng.next() * TILE);
-      ctx.globalAlpha = Math.min(0.5, cfg.grain);
-      ctx.globalCompositeOperation = "overlay";
+      const gctx = this.gctx;
+      // le gris moyen (128) est neutre en overlay ; à cette opacité, l'amplitude dans les tons
+      // moyens est la même qu'avec l'ancien grain additif, et nulle dans les noirs et les blancs
+      gctx.globalAlpha = Math.min(0.5, cfg.grain);
       const tile = this.grainTile();
-      for (let y = -oy; y < d; y += TILE) for (let x = -ox; x < d; x += TILE) ctx.drawImage(tile, x, y);
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
+      for (let y = -oy; y < d; y += TILE) for (let x = -ox; x < d; x += TILE) gctx.drawImage(tile, x, y);
+      gctx.globalAlpha = 1;
     }
   }
 
   dispose(): void {
     this.canvas.remove();
+    this.grain.remove();
   }
 }
 

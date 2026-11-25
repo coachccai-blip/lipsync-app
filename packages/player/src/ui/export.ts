@@ -1,5 +1,5 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import { PARALLAX_OVERSCAN, bubbleBackground, traceBubblePath, type AllConfig } from "@avatar/shared";
+import { PARALLAX_OVERSCAN, bubbleBackground, rgbaToI420, traceBubblePath, type AllConfig } from "@avatar/shared";
 import { bubbleGeometry } from "../bubble.js";
 
 export interface ExportOptions {
@@ -8,8 +8,10 @@ export interface ExportOptions {
   duration: number;
   renderFrame(t: number): Promise<void>;
   captureCanvas(): HTMLCanvasElement | undefined;
-  /** Canvas du post-traitement, dessiné au-dessus du personnage. */
+  /** Canvas du post-traitement (vignettage), dessiné au-dessus du personnage. */
   postCanvas?(): HTMLCanvasElement | undefined;
+  /** Canvas du grain, composé en mode « overlay » au-dessus du personnage. */
+  grainCanvas?(): HTMLCanvasElement | undefined;
   /** Décalage du fond de bulle (parallaxe) à l'instant t. */
   bubbleOffset?(t: number): { dx: number; dy: number };
   audio?: { mono: Float32Array; sampleRate: number };
@@ -27,10 +29,19 @@ export function browserExportSupported(): boolean {
  * Export MP4 dans le navigateur (WebCodecs H.264 + AAC, muxage mp4-muxer) : même
  * boucle image par image que le rendu hors ligne, sans serveur ni ffmpeg. La page
  * (fond, bulle, anneau) est recomposée dans un canvas à la résolution de sortie.
+ *
+ * Chaque image est convertie ici même en Y'CbCr 4:2:0 BT.709 plage limitée (16-235) avant
+ * l'encodage, au lieu de laisser le navigateur convertir le canvas : la vidéo est alors
+ * conforme à ce qu'attendent tous les lecteurs (le canvas converti par Chrome est tagué
+ * « plage complète », que beaucoup de lecteurs écrasent : noirs bouchés et pixels noirs qui
+ * grésillent dans les zones sombres), et le résultat est identique quel que soit le GPU ou
+ * l'encodeur. L'encodeur logiciel du navigateur est préféré à l'encodeur matériel de la
+ * carte graphique (pilotes inégaux) ; il reste en secours.
  */
 export async function exportMp4(o: ExportOptions): Promise<Blob> {
   if (!browserExportSupported()) throw new Error("Ce navigateur ne prend pas en charge WebCodecs (utilisez Chrome, Edge ou un Firefox récent).");
   const { width, height } = o.cfg.scene.resolution;
+  if (width % 2 || height % 2) throw new Error(`Résolution ${width}×${height} : largeur et hauteur doivent être paires pour l'export MP4.`);
   const fps = o.fps;
   const total = Math.ceil(o.duration * fps);
   const video = await pickVideoCodec(width, height, fps);
@@ -86,6 +97,7 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
   const over = (o.cfg.scene.bubble.parallaxe ?? 0) > 0 ? PARALLAX_OVERSCAN : 1;
   const bd = d * over;
   const frameUs = 1e6 / fps;
+  let i420: Uint8Array | undefined;
   for (let n = 0; n < total; n++) {
     if (o.signal?.aborted) {
       videoEncoder.close();
@@ -106,6 +118,12 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
     ctx.fillStyle = parseCssBackground(bubbleBackground(o.cfg.scene.bubble), ctx, bx, by, bd, bd);
     ctx.fillRect(bx, by, bd, bd);
     if (src) ctx.drawImage(src, cx - d / 2, cy - d / 2, d, d);
+    const grain = o.grainCanvas?.();
+    if (grain) {
+      ctx.globalCompositeOperation = "overlay";
+      ctx.drawImage(grain, cx - d / 2, cy - d / 2, d, d);
+      ctx.globalCompositeOperation = "source-over";
+    }
     const post = o.postCanvas?.();
     if (post) ctx.drawImage(post, cx - d / 2, cy - d / 2, d, d);
     ctx.restore();
@@ -115,7 +133,16 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
       ctx.strokeStyle = ring.color;
       ctx.stroke();
     }
-    const frame = new VideoFrame(out, { timestamp: Math.round(n * frameUs), duration: Math.round(frameUs) });
+    const yuv = rgbaToI420(ctx.getImageData(0, 0, width, height).data, width, height, i420);
+    i420 = yuv.data;
+    const frame = new VideoFrame(yuv.data, {
+      format: "I420",
+      codedWidth: width,
+      codedHeight: height,
+      timestamp: Math.round(n * frameUs),
+      duration: Math.round(frameUs),
+      colorSpace: { primaries: "bt709", transfer: "bt709", matrix: "bt709", fullRange: false },
+    });
     videoEncoder.encode(frame, { keyFrame: n % (fps * 2) === 0 });
     frame.close();
     while (videoEncoder.encodeQueueSize > 6) await tick();
@@ -132,7 +159,10 @@ export async function exportMp4(o: ExportOptions): Promise<Blob> {
 
 type MuxVideo = "avc" | "hevc" | "vp9" | "av1";
 
-/** H.264 (High puis Main/Baseline) en priorité, sinon HEVC, VP9 ou AV1 selon ce que le navigateur sait encoder. */
+/**
+ * H.264 (High puis Main/Baseline) en priorité, sinon HEVC, VP9 ou AV1 selon ce que le navigateur
+ * sait encoder. Pour chaque codec, l'encodeur logiciel est essayé avant l'encodeur matériel.
+ */
 async function pickVideoCodec(width: number, height: number, framerate: number): Promise<{ mux: MuxVideo; config: VideoEncoderConfig }> {
   const candidates: { mux: MuxVideo; codec: string; extra?: Partial<VideoEncoderConfig> }[] = [
     { mux: "avc", codec: "avc1.640033", extra: { avc: { format: "avc" } } },
@@ -146,12 +176,14 @@ async function pickVideoCodec(width: number, height: number, framerate: number):
     { mux: "av1", codec: "av01.0.08M.08" },
   ];
   for (const c of candidates) {
-    const config: VideoEncoderConfig = { codec: c.codec, width, height, framerate, ...c.extra };
-    try {
-      const r = await VideoEncoder.isConfigSupported(config);
-      if (r.supported) return { mux: c.mux, config };
-    } catch {
-      /* suivant */
+    for (const hardwareAcceleration of ["prefer-software", "no-preference"] as const) {
+      const config: VideoEncoderConfig = { codec: c.codec, width, height, framerate, hardwareAcceleration, ...c.extra };
+      try {
+        const r = await VideoEncoder.isConfigSupported(config);
+        if (r.supported) return { mux: c.mux, config };
+      } catch {
+        /* suivant */
+      }
     }
   }
   throw new Error(`Aucun encodeur vidéo pris en charge pour ${width}×${height}`);

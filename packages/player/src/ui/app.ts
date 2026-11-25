@@ -15,6 +15,7 @@ export interface PlayerLike {
   renderFrame(t: number): Promise<void>;
   captureCanvas(): HTMLCanvasElement | undefined;
   postCanvas(): HTMLCanvasElement | undefined;
+  grainCanvas(): HTMLCanvasElement | undefined;
   bubbleOffsetAt(t: number): { dx: number; dy: number };
   report?: LoadReport;
 }
@@ -753,6 +754,7 @@ export class StudioApp {
         renderFrame: (t) => this.player.renderFrame(t),
         captureCanvas: () => this.player.captureCanvas(),
         postCanvas: () => this.player.postCanvas(),
+        grainCanvas: () => this.player.grainCanvas(),
         bubbleOffset: (t) => this.player.bubbleOffsetAt(t),
         audio: this.audioAnalysis ? { mono: this.audioAnalysis.mono, sampleRate: this.audioAnalysis.sampleRate } : undefined,
         signal: abort.signal,
